@@ -15,12 +15,12 @@ spec:
   sources:
     - repoURL: https://charts.konghq.com
       chart: kong
-      targetRevision: 2.38.0
+      targetRevision: 3.4.0
       helm:
         releaseName: kong
         valueFiles:
           - $values/phase5-architecture-refactor/kong-ha/values-kong-ha.yaml
-    - repoURL: https://github.com/YOUR_ORG/banking-demo.git
+    - repoURL: https://github.com/dungxnd/banking-demo.git
       targetRevision: main
       ref: values
   destination:

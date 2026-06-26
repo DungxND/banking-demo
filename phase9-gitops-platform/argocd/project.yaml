@@ -12,7 +12,7 @@ metadata:
 spec:
   description: "Phase 9 — Platform CI/CD, infra Phase 5, app Phase 8"
   sourceRepos:
-    - https://github.com/YOUR_ORG/banking-demo.git
+    - https://github.com/dungxnd/banking-demo.git
     - https://charts.bitnami.com/bitnami
     - oci://registry-1.docker.io/bitnamicharts
     - https://charts.konghq.com

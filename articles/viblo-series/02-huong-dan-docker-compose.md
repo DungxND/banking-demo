@@ -76,8 +76,8 @@ flowchart TB
 
 | Service | Image | Port | Mô tả |
 |---------|-------|------|-------|
-| **postgres** | postgres:16 | 5432 | Database chính (users, balances, transfers, notifications) |
-| **redis** | redis:7-alpine | 6379 | Session, presence, Pub/Sub cho thông báo real-time |
+| **postgres** | postgres:18 | 5432 | Database chính (users, balances, transfers, notifications) |
+| **redis** | redis:8-alpine | 6379 | Session, presence, Pub/Sub cho thông báo real-time |
 
 ### Nhóm 2: API Gateway & Microservices
 

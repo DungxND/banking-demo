@@ -80,7 +80,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: migrate
-        image: {{ .Values.dbMigration.image | default "postgres:15-alpine" }}
+        image: {{ .Values.dbMigration.image | default "postgres:18-alpine" }}
         command:
           - /bin/sh
           - -c
@@ -149,7 +149,7 @@ spec:
 # values.yaml
 dbMigration:
   enabled: true  # Bật migration hook
-  image: postgres:15-alpine  # Image chứa psql
+  image: postgres:18-alpine  # Image chứa psql
 ```
 
 ### 3. Khi deploy

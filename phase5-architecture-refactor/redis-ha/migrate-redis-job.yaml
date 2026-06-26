@@ -20,7 +20,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: redis:7-alpine
+          image: redis:8-alpine
           command:
             - /bin/sh
             - -c

@@ -1,12 +1,12 @@
 # Multi-stage: build frontend + backend
-FROM node:20-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /app
 COPY frontend/package.json ./
 RUN npm install
 COPY frontend/ .
 RUN npm run build
 
-FROM python:3.11-slim
+FROM python:3.13-slim
 WORKDIR /app
 
 COPY backend/requirements.txt .

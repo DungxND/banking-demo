@@ -3,5 +3,5 @@ name: kong
 description: Kong API Gateway for Banking Demo
 type: application
 version: 0.1.0
-appVersion: "3.4"
+appVersion: "3.9"
 kubeVersion: ">=1.24"

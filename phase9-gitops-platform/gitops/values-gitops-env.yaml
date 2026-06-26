@@ -1,6 +1,6 @@
 # Biến môi trường GitOps — ít thay đổi, không chứa secret
 gitops:
-  repoUrl: https://github.com/YOUR_ORG/banking-demo.git
+  repoUrl: https://github.com/dungxnd/banking-demo.git
   branch: main
   valuesImagesPath: phase9-gitops-platform/gitops/values-images.yaml
 

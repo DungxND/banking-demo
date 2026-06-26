@@ -25,7 +25,7 @@ redis: Redis | None = None
 async def lifespan(app: FastAPI):
     # Startup
     global redis
-    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    redis = Redis.from_url(REDIS_URL, decode_responses=True, legacy_responses=False)
     yield
     # Shutdown
     if redis:

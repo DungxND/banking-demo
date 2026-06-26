@@ -87,7 +87,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: import
-          image: kong:3.4
+          image: kong:3.9
           env:
             - name: KONG_DATABASE
               value: "postgres"

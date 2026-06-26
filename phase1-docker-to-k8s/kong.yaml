@@ -22,7 +22,7 @@ spec:
         - name: dockerhub-registry
       containers:
         - name: kong
-          image: kong:3.4
+          image: kong:3.9
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

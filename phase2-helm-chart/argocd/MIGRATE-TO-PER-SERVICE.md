@@ -76,7 +76,7 @@ kubectl patch secret banking-db-secret -n banking -p "{\"stringData\": {\"REDIS_
 **Kiểm tra**:
 
 ```bash
-kubectl run -n banking redis-test --rm -it --restart=Never --image=redis:7 -- \
+kubectl run -n banking redis-test --rm -it --restart=Never --image=redis:8 -- \
   redis-cli -h redis.redis.svc.cluster.local -a "$REDIS_PASS" ping
 # Kỳ vọng: PONG
 ```
@@ -136,11 +136,11 @@ kubectl rollout status deployment -n banking auth-service account-service transf
 
 ```bash
 # 1. Test Postgres
-kubectl run -n banking psql-test --rm -it --restart=Never --image=postgres:15 -- \
+kubectl run -n banking psql-test --rm -it --restart=Never --image=postgres:18 -- \
   psql "postgresql://banking:bankingpass@postgres-postgresql-primary.postgres.svc.cluster.local:5432/banking" -c "SELECT 1"
 
 # 2. Test Redis (không password → NOAUTH)
-kubectl run -n banking redis-test --rm -it --restart=Never --image=redis:7 -- \
+kubectl run -n banking redis-test --rm -it --restart=Never --image=8 -- \
   redis-cli -h redis.redis.svc.cluster.local ping
 # Nếu (error) NOAUTH Authentication required → cần patch REDIS_URL có password (Bước 3)
 ```

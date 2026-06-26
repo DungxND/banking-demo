@@ -26,7 +26,7 @@ secret:
 ## Phase 4 v2 - DB migration hook (runs as Helm pre-install/pre-upgrade Job)
 dbMigration:
   enabled: false
-  image: "postgres:15-alpine"   # contains psql
+  image: "postgres:18-alpine"   # contains psql
   hookWeight: "-10"
   backoffLimit: 2
   activeDeadlineSeconds: 300
