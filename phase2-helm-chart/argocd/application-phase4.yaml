@@ -9,7 +9,7 @@ metadata:
 spec:
   project: banking-demo-phase4
   source:
-    repoURL: https://github.com/ntoa25001/banking-demo.git
+    repoURL: https://github.com/dungxnd/banking-demo.git
     targetRevision: main
     path: phase2-helm-chart/banking-demo
     helm:

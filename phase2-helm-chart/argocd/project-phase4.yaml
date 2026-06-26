@@ -9,7 +9,7 @@ metadata:
 spec:
   description: "Banking Demo Phase 4 - full stack on single-node K3s"
   sourceRepos:
-    - https://github.com/ntoa25001/banking-demo.git
+    - https://github.com/dungxnd/banking-demo.git
   destinations:
     - namespace: banking
       server: https://kubernetes.default.svc

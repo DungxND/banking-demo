@@ -13,7 +13,7 @@ metadata:
 spec:
   project: banking-demo
   source:
-    repoURL: https://github.com/ntoa25001/banking-demo.git  # ← Đổi thành repo của bạn
+    repoURL: https://github.com/dungxnd/banking-demo.git  # ← Đổi thành repo của bạn
     targetRevision: main                                      # ← Branch hoặc tag
     path: phase2-helm-chart/banking-demo
     helm:

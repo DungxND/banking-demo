@@ -2,7 +2,7 @@ environment: vps-dev
 server_name: banking-lab
 public_ip: 194.233.85.69
 
-repo_url: "https://github.com/ntoa25001/banking-demo.git"
+repo_url: "https://github.com/dungxnd/banking-demo.git"
 repo_branch: "main"
 repo_path_on_server: "/opt/banking-demo"
 

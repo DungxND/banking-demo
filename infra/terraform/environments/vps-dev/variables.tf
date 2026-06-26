@@ -70,7 +70,7 @@ variable "kubeconfig_path" {
 variable "repo_url" {
   description = "Repo GitHub"
   type        = string
-  default     = "https://github.com/ntoa25001/banking-demo.git"
+  default     = "https://github.com/dungxnd/banking-demo.git"
 }
 
 variable "repo_branch" {
