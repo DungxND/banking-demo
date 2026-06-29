@@ -5,7 +5,8 @@ psycopg[binary]==3.3.4
 pydantic==2.13.4
 pwdlib[bcrypt]==0.3.0
 redis==8.0.1
-# Observability (versions aligned: SDK 1.43 uses instrumentation 0.64b0)
+# Observability
+instana==3.16.0
 prometheus_client==0.25.0
 opentelemetry-api==1.43.0
 opentelemetry-sdk==1.43.0

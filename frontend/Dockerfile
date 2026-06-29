@@ -16,15 +16,12 @@ RUN npm run build
 # ===== Stage 2: Serve bằng Nginx =====
 FROM nginx:alpine
 
-# Xóa config mặc định (optional)
-RUN rm /etc/nginx/conf.d/default.conf
-
 # Copy build output
 COPY --from=build /app/build /usr/share/nginx/html
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Write our config as the main nginx.conf so Instana agent can find stub_status
+COPY nginx.conf /etc/nginx/nginx.conf
 
-EXPOSE 80
+EXPOSE 80 8080
 
 CMD ["nginx", "-g", "daemon off;"]

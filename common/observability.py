@@ -1,12 +1,16 @@
 """
-Observability: OpenTelemetry tracing + Prometheus metrics.
-- Tracing: OTLP export to collector (optional via OTEL_EXPORTER_OTLP_ENDPOINT).
+Observability: Instana tracing + Prometheus metrics.
+- Tracing: Instana Python sensor (auto-instruments FastAPI, SQLAlchemy, Redis, etc.).
 - Metrics: Prometheus /metrics endpoint (prometheus_client).
 """
 import os
-from prometheus_client import Counter, Histogram, generate_latest, REGISTRY, CollectorRegistry
+from prometheus_client import Counter, Histogram, generate_latest, CollectorRegistry
 
-# Default registry with optional service label
+try:
+    import instana  # noqa: F401 — auto-instruments the application
+except Exception:
+    pass
+
 _metrics_registry: CollectorRegistry | None = None
 _request_count: Counter | None = None
 _request_latency: Histogram | None = None
@@ -45,37 +49,9 @@ def get_metrics_content() -> bytes:
     return generate_latest(_metrics_registry)
 
 
-def init_tracing(service_name: str) -> None:
-    """Initialize OpenTelemetry tracer; export to OTLP if OTEL_EXPORTER_OTLP_ENDPOINT is set."""
-    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
-    if not endpoint:
-        return
-
-    try:
-        from opentelemetry import trace
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-        from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-
-        resource = Resource.create({SERVICE_NAME: service_name})
-        provider = TracerProvider(resource=resource)
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
-        trace.set_tracer_provider(provider)
-    except Exception:
-        pass  # optional: tracing off if deps missing or collector unreachable
-
-
 def instrument_fastapi(app, service_name: str) -> None:
-    """Add OpenTelemetry FastAPI auto-instrumentation, Prometheus metrics middleware, and /metrics route."""
-    init_tracing(service_name)
+    """Add Instana tracing, Prometheus metrics middleware, and /metrics route."""
     setup_metrics(service_name)
-
-    try:
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        FastAPIInstrumentor.instrument_app(app)
-    except Exception:
-        pass
 
     from fastapi import Response
     from starlette.middleware.base import BaseHTTPMiddleware

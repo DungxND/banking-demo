@@ -9,6 +9,11 @@ from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 from redis.asyncio import Redis
 
+try:
+    import instana  # noqa: F401 — Instana auto-instrumentation
+except Exception:
+    pass
+
 from db import SessionLocal, engine, Base
 from models import User, Transfer, Notification
 

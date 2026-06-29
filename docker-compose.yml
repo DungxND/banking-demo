@@ -11,6 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
+      - ./backend/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U banking"]
       interval: 10s
@@ -78,6 +79,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       SESSION_TTL_SECONDS: 86400
       CORS_ORIGINS: http://localhost:3000
+      INSTANA_SERVICE_NAME: auth-service
+      INSTANA_AGENT_HOST: ${INSTANA_AGENT_HOST:-host.docker.internal}
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,6 +104,8 @@ services:
       DATABASE_URL: postgresql://banking:bankingpass@postgres:5432/banking
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: http://localhost:3000
+      INSTANA_SERVICE_NAME: account-service
+      INSTANA_AGENT_HOST: ${INSTANA_AGENT_HOST:-host.docker.internal}
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,6 +129,8 @@ services:
       DATABASE_URL: postgresql://banking:bankingpass@postgres:5432/banking
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: http://localhost:3000
+      INSTANA_SERVICE_NAME: transfer-service
+      INSTANA_AGENT_HOST: ${INSTANA_AGENT_HOST:-host.docker.internal}
     depends_on:
       postgres:
         condition: service_healthy
@@ -147,6 +154,8 @@ services:
       DATABASE_URL: postgresql://banking:bankingpass@postgres:5432/banking
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: http://localhost:3000
+      INSTANA_SERVICE_NAME: notification-service
+      INSTANA_AGENT_HOST: ${INSTANA_AGENT_HOST:-host.docker.internal}
     depends_on:
       postgres:
         condition: service_healthy
