@@ -12,6 +12,7 @@ from common.models import User
 from common.auth import hash_password, verify_password
 from common.redis_utils import create_session
 from common.observability import instrument_fastapi
+from seed import seed_demo_users
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,6 +25,7 @@ redis: Redis | None = None
 async def lifespan(app: FastAPI):
     global redis
     redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    seed_demo_users()
     yield
     if redis:
         await redis.close()
