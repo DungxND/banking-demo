@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import select, selectinload
 from pydantic import BaseModel
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
+from pwdlib.hashers.bcrypt import BcryptHasher
 from redis.asyncio import Redis
 
 from db import SessionLocal, engine, Base
@@ -13,7 +14,7 @@ from models import User, Transfer, Notification
 
 Base.metadata.create_all(bind=engine)
 
-pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd = PasswordHash((BcryptHasher(),))
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 SESSION_TTL = int(os.getenv("SESSION_TTL_SECONDS", "86400"))
