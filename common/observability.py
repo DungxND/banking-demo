@@ -1,6 +1,6 @@
 """
 Observability: OpenTelemetry tracing + Prometheus metrics.
-- Tracing: OTLP export to collector (optional via OTEL_EXPORTER_OTLP_ENDPOINT).
+- Tracing: OTLP export to Instana agent (or any OTLP collector).
 - Metrics: Prometheus /metrics endpoint (prometheus_client).
 """
 import os
@@ -46,8 +46,19 @@ def get_metrics_content() -> bytes:
 
 
 def init_tracing(service_name: str) -> None:
-    """Initialize OpenTelemetry tracer; export to OTLP if OTEL_EXPORTER_OTLP_ENDPOINT is set."""
+    """Initialize OpenTelemetry tracer; export to Instana agent OTLP endpoint.
+
+    Priority:
+    1. OTEL_EXPORTER_OTLP_ENDPOINT env var (explicit override)
+    2. INSTANA_AGENT_HOST env var → http://<host>:4317 (Instana agent defaults to OTLP on 4317)
+    3. Skip tracing if neither is set
+    """
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
+    if not endpoint:
+        agent_host = os.getenv("INSTANA_AGENT_HOST", "").strip()
+        if agent_host:
+            endpoint = f"http://{agent_host}:4317"
+
     if not endpoint:
         return
 
@@ -60,10 +71,10 @@ def init_tracing(service_name: str) -> None:
 
         resource = Resource.create({SERVICE_NAME: service_name})
         provider = TracerProvider(resource=resource)
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True)))
         trace.set_tracer_provider(provider)
     except Exception:
-        pass  # optional: tracing off if deps missing or collector unreachable
+        pass  # optional: tracing off if deps missing or agent unreachable
 
 
 def instrument_fastapi(app, service_name: str) -> None:
