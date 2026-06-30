@@ -3,13 +3,17 @@ Observability: Instana tracing + Prometheus metrics.
 - Tracing: Instana Python sensor (auto-instruments FastAPI, SQLAlchemy, Redis, etc.).
 - Metrics: Prometheus /metrics endpoint (prometheus_client).
 """
+import logging
 import os
 from prometheus_client import Counter, Histogram, generate_latest, CollectorRegistry
 
+_log = logging.getLogger(__name__)
+
 try:
     import instana  # noqa: F401 — auto-instruments the application
-except Exception:
-    pass
+    _log.info("Instana SDK loaded successfully")
+except Exception as exc:
+    _log.warning("Instana SDK not loaded: %s", exc)
 
 _metrics_registry: CollectorRegistry | None = None
 _request_count: Counter | None = None

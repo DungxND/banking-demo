@@ -5,16 +5,31 @@
 # Merge order: configuration-*.yaml files merged alphabetically.
 
 # ---------------------------------------------------------------------------
+# Zone — groups this host in the Application Perspective filter drop-downs.
+# Without this the host appears in Infrastructure but NOT in the AP builder.
+# ---------------------------------------------------------------------------
+com.instana.zone:
+  name: banking-ec2-prod
+
+# ---------------------------------------------------------------------------
+# Host tags — additional filter dimensions in the AP builder
+# ---------------------------------------------------------------------------
+com.instana.tags:
+  - environment: production
+  - team: banking
+  - project: banking-demo
+
+# ---------------------------------------------------------------------------
 # OpenTelemetry — accept OTLP from Python services (gRPC :4317, HTTP :4318)
 # ---------------------------------------------------------------------------
 com.instana.plugin.opentelemetry:
   enabled: true
 
 # ---------------------------------------------------------------------------
-# Python — Instana SDK handles auto-instrumentation directly
+# Python — enable agent-side Python process detection
 # ---------------------------------------------------------------------------
 com.instana.plugin.python:
-  enabled: false
+  enabled: true
 
 # ---------------------------------------------------------------------------
 # PostgreSQL monitoring
