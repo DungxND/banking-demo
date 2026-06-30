@@ -1,6 +1,5 @@
 import React, { useRef, useState } from "react";
 import { api } from "./api";
-import Card from "./ui/Card";
 
 export default function Register({ onGoLogin }) {
   const [username, setUsername] = useState("");
@@ -42,12 +41,10 @@ export default function Register({ onGoLogin }) {
     try {
       await api.register(username.trim(), password);
       setSuccess(true);
-      // Auto-navigate to login after a short moment so the user sees the message
       setTimeout(onGoLogin, 1500);
     } catch (e) {
       const raw = e.message || "Registration failed. Please try again.";
-      if (raw.toLowerCase().includes("already taken") ||
-          raw.toLowerCase().includes("409")) {
+      if (raw.toLowerCase().includes("already taken") || raw.toLowerCase().includes("409")) {
         setFieldErrors({ username: "That username is already taken. Choose another." });
       } else if (raw.toLowerCase().includes("network")) {
         setServerError("Cannot reach the server. Check your connection and retry.");
@@ -78,61 +75,92 @@ export default function Register({ onGoLogin }) {
   };
 
   return (
-    <Card
-      title="Create account"
-      desc="Register a new user to test transfers and realtime notifications."
-      footer="Passwords are hashed with bcrypt — never stored in plain text."
-    >
-      <div className="space-y-4">
-        {/* Username */}
-        <div>
-          <label className="text-xs font-medium text-slate-600" htmlFor="reg-username">
-            Username
-          </label>
-          <input
-            id="reg-username"
-            autoComplete="username"
-            autoFocus
-            className={`mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${
-              fieldErrors.username ? "border-red-400 bg-red-50" : ""
-            }`}
-            placeholder="min 3 characters"
-            value={username}
-            onChange={(e) => changeUsername(e.target.value)}
-            onKeyDown={onUsernameKey}
-            disabled={loading || success}
-          />
-          {fieldErrors.username && (
-            <p className="mt-1 text-xs text-red-600">{fieldErrors.username}</p>
-          )}
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-2xl border bg-white p-7 shadow-sm">
+
+        {/* Header — matches Login */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-10 w-10 rounded-xl bg-blue-600 text-white grid place-items-center font-bold text-lg">
+            B
+          </div>
+          <div>
+            <div className="text-base font-semibold text-slate-900">NPD Banking</div>
+            <div className="text-xs text-slate-500">Postgres · Redis Session · WebSocket Notify</div>
+          </div>
         </div>
 
-        {/* Password */}
-        <div>
-          <label className="text-xs font-medium text-slate-600" htmlFor="reg-password">
-            Password
-          </label>
-          <input
-            id="reg-password"
-            ref={passwordRef}
-            autoComplete="new-password"
-            type="password"
-            className={`mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${
-              fieldErrors.password ? "border-red-400 bg-red-50" : ""
-            }`}
-            placeholder="min 6 characters"
-            value={password}
-            onChange={(e) => changePassword(e.target.value)}
-            onKeyDown={onPasswordKey}
-            disabled={loading || success}
-          />
-          {fieldErrors.password && (
-            <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
-          )}
+        <h2 className="text-xl font-semibold text-slate-900">Create account</h2>
+        <p className="text-sm text-slate-500 mt-1 mb-5">
+          Register a new user to test transfers and realtime notifications.
+        </p>
+
+        {/* Fields */}
+        <div className="space-y-4">
+          {/* Username */}
+          <div>
+            <label className="text-xs font-medium text-slate-600" htmlFor="reg-username">
+              Username
+            </label>
+            <input
+              id="reg-username"
+              autoComplete="username"
+              autoFocus
+              className={`mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${
+                fieldErrors.username ? "border-red-400 bg-red-50" : ""
+              }`}
+              placeholder="min 3 characters"
+              value={username}
+              onChange={(e) => changeUsername(e.target.value)}
+              onKeyDown={onUsernameKey}
+              disabled={loading || success}
+            />
+            {fieldErrors.username && (
+              <p className="mt-1 text-xs text-red-600">{fieldErrors.username}</p>
+            )}
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="text-xs font-medium text-slate-600" htmlFor="reg-password">
+              Password
+            </label>
+            <input
+              id="reg-password"
+              ref={passwordRef}
+              autoComplete="new-password"
+              type="password"
+              className={`mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${
+                fieldErrors.password ? "border-red-400 bg-red-50" : ""
+              }`}
+              placeholder="min 6 characters"
+              value={password}
+              onChange={(e) => changePassword(e.target.value)}
+              onKeyDown={onPasswordKey}
+              disabled={loading || success}
+            />
+            {fieldErrors.password && (
+              <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
+            )}
+          </div>
         </div>
+
+        {/* Server-level error banner */}
+        {serverError && (
+          <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="mt-0.5 shrink-0">⚠</span>
+            <span>{serverError}</span>
+          </div>
+        )}
+
+        {/* Success banner */}
+        {success && (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            ✓ Account created — redirecting to sign in…
+          </div>
+        )}
 
         {/* Actions */}
-        <div className="flex gap-3 pt-2">
+        <div className="mt-5 flex gap-3">
           <button
             type="button"
             disabled={loading || success}
@@ -145,27 +173,16 @@ export default function Register({ onGoLogin }) {
             type="button"
             onClick={onGoLogin}
             disabled={loading}
-            className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            className="flex-1 rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
-            Back
+            Back to sign in
           </button>
         </div>
 
-        {/* Success banner */}
-        {success && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            ✓ Account created — redirecting to sign in…
-          </div>
-        )}
-
-        {/* Server-level error banner */}
-        {serverError && (
-          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span className="mt-0.5 shrink-0">⚠</span>
-            <span>{serverError}</span>
-          </div>
-        )}
+        <div className="mt-5 text-xs text-slate-400">
+          © Banking Demo Lab · Passwords hashed with bcrypt
+        </div>
       </div>
-    </Card>
+    </div>
   );
 }
