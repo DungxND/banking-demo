@@ -2,8 +2,10 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -58,6 +60,29 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Auth Service", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Convert Pydantic 422 errors into a single human-readable message.
+
+    FastAPI's default detail is a list of {loc, msg, type} objects — useful for
+    machine consumers but renders as '[object Object]' in naive frontends.
+    We flatten it to a plain string while keeping the 422 status.
+    """
+    messages = []
+    for err in exc.errors():
+        loc = err.get("loc", ())
+        # Skip the top-level 'body' segment; keep the field name only
+        field_parts = [str(p) for p in loc if p != "body"]
+        field = ".".join(field_parts) if field_parts else "input"
+        messages.append(f"{field}: {err['msg']}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "; ".join(messages)},
+    )
+
+
 instrument_fastapi(app, "auth-service")
 app.add_middleware(
     CORSMiddleware,

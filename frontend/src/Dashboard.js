@@ -3,6 +3,7 @@ import Layout from "./ui/Layout";
 import Card from "./ui/Card";
 import { api, getSession, clearSession } from "./api";
 
+
 export default function Dashboard({ onLogout }) {
   const [me, setMe] = useState(null);
   const [toUser, setToUser] = useState("");
@@ -83,7 +84,8 @@ export default function Dashboard({ onLogout }) {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await api.logout(); } catch { /* best-effort */ }
     clearSession();
     onLogout?.();
   };
