@@ -107,6 +107,7 @@ spec:
     - port: 8000
       targetPort: 8000
       name: proxy
+      nodePort: 32000
     - port: 8001
       targetPort: 8001
       name: admin
