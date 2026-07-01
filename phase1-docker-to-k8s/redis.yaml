@@ -1,4 +1,4 @@
-# Giai đoạn 1: Redis dùng StatefulSet (cache/database có state, cần identity và có thể persist RDB)
+# Phase 1: Redis — StatefulSet (stable identity + optional persistence)
 ---
 apiVersion: v1
 kind: Service
@@ -7,14 +7,38 @@ metadata:
   namespace: banking
   labels:
     app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: banking-demo
 spec:
+  clusterIP: None   # headless — required for StatefulSet DNS
+  selector:
+    app: redis
   ports:
     - port: 6379
       targetPort: 6379
       name: redis
-  clusterIP: None
+---
+# NodePort Service — exposes Redis on a stable host port so the Instana
+# host agent reaches it via localhost:32002 (no k8s DNS resolution needed
+# from the host, no hardcoded pod IP that changes on restart).
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-nodeport
+  namespace: banking
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: banking-demo
+spec:
+  type: NodePort
   selector:
     app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+      nodePort: 32002
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -23,6 +47,8 @@ metadata:
   namespace: banking
   labels:
     app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: banking-demo
 spec:
   serviceName: redis
   replicas: 1
@@ -33,11 +59,15 @@ spec:
     metadata:
       labels:
         app: redis
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/part-of: banking-demo
     spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
         fsGroup: 999
+        runAsUser: 999    # redis user in official image
+        runAsNonRoot: true
       imagePullSecrets:
         - name: dockerhub-registry
       containers:
@@ -45,8 +75,11 @@ spec:
           image: redis:8-alpine
           securityContext:
             allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 6379
+              name: redis
           resources:
             requests:
               memory: "64Mi"
@@ -62,11 +95,18 @@ spec:
               command: ["redis-cli", "ping"]
             initialDelaySeconds: 3
             periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
   volumeClaimTemplates:
     - metadata:
         name: redis-data
       spec:
-        storageClassName: nfs-client
+        storageClassName: local-path
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:

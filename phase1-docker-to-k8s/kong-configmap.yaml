@@ -1,4 +1,9 @@
-# Giai đoạn 1: Kong declarative config (ConfigMap)
+# Phase 1: Kong declarative config (ConfigMap)
+# Prometheus plugin enabled globally — required by the Instana Kong sensor for
+# latency, bandwidth, and request metrics.
+# upstream_health_metrics disabled: active health checks block the /metrics
+# response when upstream pods are slow, causing Instana sensor timeouts.
+# CORS plugins removed — handled at the frontend/ingress layer for k8s.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,6 +14,14 @@ data:
     _format_version: "3.0"
     _transform: true
 
+    plugins:
+      - name: prometheus
+        config:
+          status_code_metrics: true
+          latency_metrics: true
+          bandwidth_metrics: true
+          upstream_health_metrics: false
+
     services:
       - name: auth-service
         url: http://auth-service:8001
@@ -17,26 +30,6 @@ data:
             paths:
               - /api/auth
             strip_path: true
-        plugins:
-          - name: cors
-            config:
-              origins:
-                - http://localhost:3000
-              credentials: true
-              methods:
-                - GET
-                - POST
-                - PUT
-                - DELETE
-                - OPTIONS
-              headers:
-                - Accept
-                - Accept-Version
-                - Content-Length
-                - Content-MD5
-                - Content-Type
-                - Date
-                - X-Session
 
       - name: account-service
         url: http://account-service:8002
@@ -45,26 +38,6 @@ data:
             paths:
               - /api/account
             strip_path: true
-        plugins:
-          - name: cors
-            config:
-              origins:
-                - http://localhost:3000
-              credentials: true
-              methods:
-                - GET
-                - POST
-                - PUT
-                - DELETE
-                - OPTIONS
-              headers:
-                - Accept
-                - Accept-Version
-                - Content-Length
-                - Content-MD5
-                - Content-Type
-                - Date
-                - X-Session
 
       - name: transfer-service
         url: http://transfer-service:8003
@@ -73,26 +46,6 @@ data:
             paths:
               - /api/transfer
             strip_path: true
-        plugins:
-          - name: cors
-            config:
-              origins:
-                - http://localhost:3000
-              credentials: true
-              methods:
-                - GET
-                - POST
-                - PUT
-                - DELETE
-                - OPTIONS
-              headers:
-                - Accept
-                - Accept-Version
-                - Content-Length
-                - Content-MD5
-                - Content-Type
-                - Date
-                - X-Session
 
       - name: notification-service
         url: http://notification-service:8004
@@ -104,26 +57,7 @@ data:
           - name: notification-ws-route
             paths:
               - /ws
+            strip_path: false
             protocols:
               - http
               - https
-        plugins:
-          - name: cors
-            config:
-              origins:
-                - http://localhost:3000
-              credentials: true
-              methods:
-                - GET
-                - POST
-                - PUT
-                - DELETE
-                - OPTIONS
-              headers:
-                - Accept
-                - Accept-Version
-                - Content-Length
-                - Content-MD5
-                - Content-Type
-                - Date
-                - X-Session

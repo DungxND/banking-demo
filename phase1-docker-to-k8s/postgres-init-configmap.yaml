@@ -1,0 +1,22 @@
+# Phase 1: PostgreSQL init — Instana stats tracking
+#
+# Mirrors what Docker Compose does via ./backend/init:/docker-entrypoint-initdb.d.
+# The official postgres image runs every *.sql file in that directory on first
+# startup (when the data directory is empty). These three settings are required
+# by the Instana PostgreSQL sensor — without them the agent raises:
+#   postgresql_stats_not_enabled
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: banking
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: banking-demo
+data:
+  01-stats-tracking.sql: |
+    ALTER SYSTEM SET track_counts = on;
+    ALTER SYSTEM SET track_io_timing = on;
+    ALTER SYSTEM SET track_activities = on;
+    SELECT pg_reload_conf();

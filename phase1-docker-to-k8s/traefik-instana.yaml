@@ -1,0 +1,62 @@
+# Phase 1: Traefik — Instana sensor configuration
+#
+# k3s manages Traefik via an internal Helm chart. The supported way to patch it
+# is a HelmChartConfig in kube-system. Apply with:
+#
+#   kubectl apply -f traefik-instana.yaml
+#   # — or — copy to /var/lib/rancher/k3s/server/manifests/ (k3s auto-applies)
+#
+# What this does:
+#   1. Sends Traefik traces via OTLP/gRPC → Instana agent :4317 on the node IP
+#      (Traefik v3 removed --tracing.instana; OTLP is the replacement)
+#   2. Opens a dedicated metrics entrypoint on :9100 and exposes Prometheus
+#      metrics there — required by the Instana Traefik sensor for metrics collection
+#
+# References:
+#   https://www.ibm.com/docs/en/instana-observability/current?topic=technologies-monitoring-traefik
+#   https://doc.traefik.io/traefik/v3.7/migrate/v2-to-v3-details/#tracing
+#   https://docs.k3s.io/helm#customizing-packaged-components-with-helmchartconfig
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    # -----------------------------------------------------------------------
+    # Tracing via OTLP/gRPC (Traefik v3 — --tracing.instana removed in v3)
+    # -----------------------------------------------------------------------
+    # NODE_IP must be declared BEFORE OTEL_EXPORTER_OTLP_ENDPOINT so that
+    # Kubernetes $(NODE_IP) substitution resolves in the final pod spec.
+    env:
+      - name: NODE_IP
+        valueFrom:
+          fieldRef:
+            fieldPath: status.hostIP
+      - name: INSTANA_AGENT_HOST
+        valueFrom:
+          fieldRef:
+            fieldPath: status.hostIP
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://$(NODE_IP):4317"
+
+    # Traefik v3 Helm chart native tracing config (static fallback).
+    tracing:
+      otlp:
+        grpc:
+          endpoint: "localhost:4317"
+          insecure: true
+
+    additionalArguments:
+      - "--entrypoints.metrics.address=:9100"
+      - "--metrics.prometheus.entryPoint=metrics"
+
+    # -----------------------------------------------------------------------
+    # Prometheus metrics endpoint — required by the Instana Traefik sensor.
+    # Exposes /metrics on :9100 inside the pod; the Instana agent scrapes it.
+    # Without this the agent raises traefik_metrics_api_not_accessible.
+    # -----------------------------------------------------------------------
+    ports:
+      metrics:
+        port: 9100
+        exposedPort: 9100

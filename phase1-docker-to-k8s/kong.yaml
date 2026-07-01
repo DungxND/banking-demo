@@ -1,3 +1,5 @@
+# Phase 1: Kong API Gateway
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,6 +7,8 @@ metadata:
   namespace: banking
   labels:
     app: kong
+    app.kubernetes.io/name: kong
+    app.kubernetes.io/part-of: banking-demo
 spec:
   replicas: 1
   selector:
@@ -14,6 +18,8 @@ spec:
     metadata:
       labels:
         app: kong
+        app.kubernetes.io/name: kong
+        app.kubernetes.io/part-of: banking-demo
     spec:
       securityContext:
         seccompProfile:
@@ -40,6 +46,9 @@ spec:
               value: /dev/stderr
             - name: KONG_ADMIN_ERROR_LOG
               value: /dev/stderr
+            # Admin bound to 0.0.0.0 — Instana Host Agent reaches it via
+            # NodePort 32001 → localhost:32001 (host can't resolve k8s DNS).
+            # In production, restrict via NetworkPolicy, not loopback binding.
             - name: KONG_ADMIN_LISTEN
               value: 0.0.0.0:8001
             - name: KONG_PROXY_LISTEN
@@ -68,18 +77,30 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["kong", "health"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
       volumes:
         - name: kong-config
           configMap:
             name: kong-config
-
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: kong
   namespace: banking
+  labels:
+    app: kong
+    app.kubernetes.io/name: kong
+    app.kubernetes.io/part-of: banking-demo
 spec:
+  type: NodePort
   selector:
     app: kong
   ports:
@@ -89,3 +110,4 @@ spec:
     - port: 8001
       targetPort: 8001
       name: admin
+      nodePort: 32001

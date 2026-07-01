@@ -1,6 +1,28 @@
 _format_version: "3.0"
 _transform: true
 
+# ---------------------------------------------------------------------------
+# Global plugins — apply to every route
+# ---------------------------------------------------------------------------
+plugins:
+  # OpenTelemetry: Kong emits a root span for each proxied request and
+  # injects traceparent/tracestate so downstream services join the same trace.
+  - name: opentelemetry
+    config:
+      endpoint: http://host.docker.internal:4318/v1/traces   # OTLP HTTP (agent)
+      resource_attributes:
+        service.name: kong-gateway
+        service.namespace: banking-demo
+
+  # Prometheus: required by the Instana Kong sensor for metrics collection.
+  # upstream_health_metrics disabled to prevent sensor timeouts.
+  - name: prometheus
+    config:
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+      upstream_health_metrics: false
+
 services:
   - name: auth-service
     url: http://auth-service:8001
@@ -29,6 +51,8 @@ services:
             - Content-Type
             - Date
             - X-Session
+            - traceparent
+            - tracestate
 
   - name: account-service
     url: http://account-service:8002
@@ -57,6 +81,8 @@ services:
             - Content-Type
             - Date
             - X-Session
+            - traceparent
+            - tracestate
 
   - name: transfer-service
     url: http://transfer-service:8003
@@ -85,6 +111,8 @@ services:
             - Content-Type
             - Date
             - X-Session
+            - traceparent
+            - tracestate
 
   - name: notification-service
     url: http://notification-service:8004
@@ -119,3 +147,5 @@ services:
             - Content-Type
             - Date
             - X-Session
+            - traceparent
+            - tracestate

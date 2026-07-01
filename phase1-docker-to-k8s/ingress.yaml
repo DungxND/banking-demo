@@ -1,22 +1,16 @@
-# Giai đoạn 1: Ingress cho cluster (HAProxy Ingress) — host: npd-banking.co
+# Phase 1: Ingress (Traefik — k3s default)
+# More-specific paths listed before less-specific to ensure correct routing
+# host: field omitted — routes on path only, works with any hostname or raw IP
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: banking-ingress
   namespace: banking
 spec:
-  ingressClassName: haproxy
+  ingressClassName: traefik
   rules:
-    - host: npd-banking.co
-      http:
+    - http:
         paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: frontend
-                port:
-                  number: 80
           - path: /api
             pathType: Prefix
             backend:
@@ -31,3 +25,10 @@ spec:
                 name: kong
                 port:
                   number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
