@@ -99,6 +99,7 @@ jobs:
     needs: prepare
     if: needs.prepare.outputs.services != 'none'
     permissions:
+      contents: read    # needed to checkout the repo
       packages: write   # needed to push to ghcr.io
     strategy:
       fail-fast: false
