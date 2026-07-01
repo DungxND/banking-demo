@@ -115,7 +115,7 @@ com.instana.plugin.redis:
   password: ''
   poll_rate: 10
   hosts:
-    - host: 'localhost'
+    - host: '127.0.0.1'
       port: 32002
 
 # ---------------------------------------------------------------------------
