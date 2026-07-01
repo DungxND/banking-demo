@@ -1,140 +1,185 @@
-# Giai đoạn 1: Migrate Docker sang Kubernetes
+﻿# Phase 1: Docker Compose ΓåÆ Kubernetes
 
-Giai đoạn 1 tập trung **chuyển toàn bộ stack từ Docker Compose sang Kubernetes** với manifest files trong folder này. Các giai đoạn sau (monitoring, CI/CD, v.v.) sẽ có folder và tài liệu riêng để không lẫn lộn.
-
-- **Sơ đồ kiến trúc:** xem [ARCHITECTURE.md](./ARCHITECTURE.md) (luồng traffic, thành phần, Mermaid diagram).
-
----
-
-## Mục tiêu
-
-- **Postgres**, **Redis**: chạy dưới **StatefulSet** (database/cache có state, cần identity và storage ổn định).
-- **Kong**: API Gateway (Deployment + ConfigMap).
-- **Các service ứng dụng**: auth-service, account-service, transfer-service, notification-service (Deployment + Service).
-- **Frontend**: Deployment + Service.
-- **Ingress**: path-based qua **HAProxy Ingress** (cluster đã cài HAProxy Ingress).
-- **Storage**: PVC dùng **StorageClass `nfs-client`** (NFS server + NFS subdir provisioner).
+Migrates the banking-demo stack from Docker Compose to Kubernetes using plain manifests.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the traffic flow diagram.
 
 ---
 
-## Cấu trúc manifest trong folder này
+## Prerequisites ΓÇö get a cluster first
 
-| File | Mô tả |
-|------|--------|
-| `namespace.yaml` | Namespace `banking` |
-| `secret.yaml` | Secret DB (Postgres user/pass, DATABASE_URL, REDIS_URL) |
-| `postgres.yaml` | **StatefulSet** + Headless Service (volumeClaimTemplate cho `/var/lib/postgresql/data`) |
-| `redis.yaml` | **StatefulSet** + Headless Service (volumeClaimTemplate cho `/data`) |
-| `kong-configmap.yaml` | Config Kong (routes `/api/auth`, `/api/account`, `/api/transfer`, `/api/notifications`, `/ws`) |
-| `kong.yaml` | Deployment Kong (proxy 8000, admin 8001) |
-| `kong-service.yaml` | Service Kong |
-| `auth-service.yaml` | Deployment + Service auth-service (8001) |
-| `account-service.yaml` | Deployment + Service account-service (8002) |
-| `transfer-service.yaml` | Deployment + Service transfer-service (8003) |
-| `notification-service.yaml` | Deployment + Service notification-service (8004) |
-| `frontend.yaml` | Deployment + Service frontend (80) |
-| `ingress.yaml` | Ingress HAProxy (/) → frontend, (/api, /ws) → kong |
+You need a running Kubernetes cluster with `kubectl` connected to it before any manifest can be applied.
 
----
+### Option A ΓÇö k3s on your EC2 instance (recommended for this project)
 
-## Thứ tự triển khai (kubectl apply)
-
-Áp dụng đúng thứ tự để đảm bảo dependency (DB/Redis trước, sau đó Kong, rồi các service, cuối cùng Ingress).
+SSH into EC2 and run:
 
 ```bash
-# 1. Namespace + Secret
+curl -sfL https://get.k3s.io | sh -
+```
+
+Verify:
+
+```bash
+sudo kubectl get nodes
+# Expected: your node in Ready state
+```
+
+k3s writes the kubeconfig to `/etc/rancher/k3s/k3s.yaml`. Prefix all `kubectl` commands with `sudo`, or run once to avoid it:
+
+```bash
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+```
+
+### Option B ΓÇö use `kubectl` from your local machine
+
+Copy the kubeconfig from EC2 to your local machine:
+
+```bash
+# Run on your local machine
+scp ubuntu@<ec2-ip>:/etc/rancher/k3s/k3s.yaml ~/.kube/config
+
+# Fix the server address ΓÇö k3s defaults to 127.0.0.1, change to EC2 public IP
+sed -i 's/127.0.0.1/<ec2-ip>/g' ~/.kube/config
+
+kubectl get nodes   # verify connection
+```
+
+> Port `6443` must be open in your EC2 security group for your local IP.
+
+---
+
+## Deploy
+
+All commands below run **on EC2** (or from your local machine if you did Option B above).
+
+### Step 1 ΓÇö Clone the repo
+
+```bash
+git clone https://github.com/dungxnd/banking-demo.git
+cd banking-demo/phase1-docker-to-k8s
+```
+
+### Step 2 ΓÇö Create the namespace
+
+Everything else lives inside this namespace, so it must exist first:
+
+```bash
 kubectl apply -f namespace.yaml
-kubectl apply -f secret.yaml
-
-# 2. Database & cache (StatefulSet)
-kubectl apply -f postgres.yaml
-kubectl apply -f redis.yaml
-
-# Đợi Postgres và Redis ready (tùy cluster)
-kubectl -n banking rollout status statefulset/postgres
-kubectl -n banking rollout status statefulset/redis
-
-# 3. Kong (cần ConfigMap trước)
-kubectl apply -f kong-configmap.yaml
-kubectl apply -f kong.yaml -f kong-service.yaml
-
-# 4. Ứng dụng
-kubectl apply -f auth-service.yaml
-kubectl apply -f account-service.yaml
-kubectl apply -f transfer-service.yaml
-kubectl apply -f notification-service.yaml
-kubectl apply -f frontend.yaml
-
-# 5. Ingress (cluster đã có HAProxy Ingress)
-kubectl apply -f ingress.yaml
 ```
 
-**Một lệnh (áp dụng toàn bộ folder):**
+### Step 3 ΓÇö Pull secret (first time only)
+
+The cluster needs credentials to pull the app images from GitLab registry.
+
+Create a deploy token in GitLab:
+1. Your project ΓåÆ **Settings** ΓåÆ **Repository** ΓåÆ **Deploy tokens**
+2. **Create deploy token** ΓåÆ tick scope `read_registry` ΓåÆ copy the username + token
 
 ```bash
-kubectl apply -f namespace.yaml -f secret.yaml
-kubectl apply -f postgres.yaml -f redis.yaml
-kubectl apply -f kong-configmap.yaml -f kong.yaml -f kong-service.yaml
-kubectl apply -f auth-service.yaml -f account-service.yaml -f transfer-service.yaml -f notification-service.yaml -f frontend.yaml
-kubectl apply -f ingress.yaml
+kubectl -n banking create secret docker-registry gitlab-registry \
+  --docker-server=registry.gitlab.com \
+  --docker-username=<deploy-token-username> \
+  --docker-password=<token>
+```
+
+<details>
+<summary>Switching to GitHub Container Registry (ghcr.io)?</summary>
+
+Create a PAT: GitHub ΓåÆ **Settings** ΓåÆ **Developer settings** ΓåÆ **Personal access tokens** ΓåÆ **Tokens (classic)** ΓåÆ scope `read:packages`.
+
+```bash
+kubectl -n banking create secret docker-registry github-registry \
+  --docker-server=ghcr.io \
+  --docker-username=<your-github-username> \
+  --docker-password=<your-PAT>
+```
+
+Then update `imagePullSecrets` in each manifest from `gitlab-registry` to `github-registry`
+and change the `image:` paths to `ghcr.io/...`.
+
+</details>
+
+<details>
+<summary>Docker Hub rate limit (429 on postgres / redis / kong)?</summary>
+
+```bash
+kubectl -n banking create secret docker-registry dockerhub-registry \
+  --docker-server=https://index.docker.io/v1/ \
+  --docker-username=<your-dockerhub-username> \
+  --docker-password=<your-token>
+```
+
+</details>
+
+### Step 4 ΓÇö Deploy everything
+
+```bash
+kubectl apply -f .
+```
+
+Idempotent ΓÇö safe to re-run on updates.
+
+### Step 5 ΓÇö Verify
+
+```bash
+kubectl get pods -n banking
+# All pods should reach Running state within ~60s
+
+kubectl get ingress -n banking
+# Shows the IP to access the app
 ```
 
 ---
 
-## Lưu ý
+## Changing the image registry or tag
 
-### StatefulSet cho Postgres và Redis
+Edit the `image:` line in the relevant manifest:
 
-- **Postgres**: `volumeClaimTemplates` tạo PVC `pgdata-postgres-0`, mount tại `/var/lib/postgresql/data`. Pod có tên cố định `postgres-0`, Service headless `postgres` (clusterIP: None). **StorageClass: `nfs-client`** (NFS subdir provisioner).
-- **Redis**: `volumeClaimTemplates` tạo PVC `redis-data-redis-0` (256Mi), mount tại `/data` cho RDB/AOF nếu cần. Service headless `redis`. **StorageClass: `nfs-client`**.
+```yaml
+# example: auth-service.yaml
+image: ghcr.io/<your-org>/banking-demo/auth-service:v2
+```
 
-### Storage (NFS)
+Then re-run `kubectl apply -f .`.
 
-- Cluster dùng **NFS server** và **NFS subdir provisioner**, StorageClass tên **`nfs-client`**. Các PVC của Postgres và Redis đều chỉ định `storageClassName: nfs-client` để lưu trên NFS.
-
-### Image và Registry
-
-- Các manifest mặc định dùng **image từ GitLab Registry** và **imagePullSecrets: gitlab-registry**. Cần tạo Secret `gitlab-registry` trong namespace `banking` nếu dùng registry riêng:
-
-  ```bash
-  kubectl -n banking create secret docker-registry gitlab-registry \
-    --docker-server=registry.gitlab.com \
-    --docker-username=<user> \
-    --docker-password=<token>
-  ```
-
-- **Docker Hub rate limit (429 / ImagePullBackOff):** Image **postgres**, **redis**, **kong** lấy từ Docker Hub. Nếu cluster bị giới hạn pull (lỗi `429 Too Many Requests` / `toomanyrequests`), cần tạo secret đăng nhập Docker Hub và khai báo `imagePullSecrets` để tăng rate limit:
-
-  ```bash
-  kubectl -n banking create secret docker-registry dockerhub-registry \
-    --docker-server=https://index.docker.io/v1/ \
-    --docker-username=kiettran164 \
-    --docker-password=***********
-  ```
-
-  Các file `postgres.yaml`, `redis.yaml`, `kong.yaml` đã khai báo `imagePullSecrets: - name: dockerhub-registry`. Sau khi tạo secret, xóa pod để kéo image lại (ví dụ: `kubectl delete pod redis-0 postgres-0 -n banking`, redeploy kong nếu cần).
-
-- **Chạy với image build tại chỗ:** sửa manifest: xóa `imagePullSecrets`, đặt `imagePullPolicy: Never` và `image: <tên-image-local>`.
-
-### Ingress (HAProxy)
-
-- Cluster đã cài **HAProxy Ingress**. Ingress dùng `ingressClassName: haproxy`, path-based: `/` → frontend, `/api` và `/ws` → Kong. Truy cập qua host/IP do HAProxy Ingress cấu hình (ví dụ LoadBalancer IP hoặc hostname).
-
-### Giai đoạn sau
-
-- Giai đoạn 1 **không** gồm monitoring (Prometheus, Grafana, Jaeger, Otel). Các file trong `k8s/monitoring/` và biến OTEL trong service thuộc giai đoạn sau. Folder `k8s/` ở root có thể dùng cho giai đoạn chung hoặc tham chiếu; mọi thứ cần cho **chỉ migration Docker → K8s** nằm trong folder **phase1-docker-to-k8s** và file **PHASE1.md** này.
+> Images must be pushed to the registry before deploying. From your local machine:
+> ```bash
+> echo <PAT> | docker login ghcr.io -u <username> --password-stdin
+> docker tag auth-service:v1 ghcr.io/<org>/banking-demo/auth-service:v1
+> docker push ghcr.io/<org>/banking-demo/auth-service:v1
+> ```
 
 ---
 
-## So sánh nhanh với Docker Compose
+## Tear down
 
-| Docker Compose | Giai đoạn 1 (K8s) |
-|----------------|-------------------|
-| `postgres` (volume pgdata) | StatefulSet `postgres` + volumeClaimTemplate |
-| `redis` | StatefulSet `redis` + volumeClaimTemplate |
-| `kong` + volume kong.yml | Deployment Kong + ConfigMap `kong-config` |
-| `auth-service`, `account-service`, … | Deployment + Service từng service |
-| `frontend` | Deployment + Service frontend |
-| Port mapping local | Ingress (path /, /api, /ws) |
+```bash
+kubectl delete -f .
+```
 
-Sau khi apply xong, ứng dụng banking có thể dùng qua Ingress tương đương cách dùng qua Docker Compose (frontend + API qua Kong).
+PVCs are not deleted automatically (data is preserved). Wipe them manually if needed:
+
+```bash
+kubectl delete pvc -n banking --all
+```
+
+---
+
+## What's in this folder
+
+| File | Kind | Notes |
+|------|------|-------|
+| `namespace.yaml` | Namespace | `banking` |
+| `secret.yaml` | Secret | DB credentials, DATABASE_URL, REDIS_URL |
+| `postgres-init-configmap.yaml` | ConfigMap | Mounts `01-stats-tracking.sql` into `/docker-entrypoint-initdb.d`; enables `track_counts`, `track_io_timing`, `track_activities` for the Instana PostgreSQL sensor |
+| `postgres.yaml` | StatefulSet + Service | Headless, PVC on `local-path`, mounts postgres-init ConfigMap |
+| `redis.yaml` | StatefulSet + Service | Headless, PVC 256Mi on `nfs-client` |
+| `kong-configmap.yaml` | ConfigMap | Declarative Kong routes |
+| `kong.yaml` | Deployment + Service | Proxy :8000, admin bound to loopback only |
+| `auth-service.yaml` | Deployment + Service | Port 8001 |
+| `account-service.yaml` | Deployment + Service | Port 8002 |
+| `transfer-service.yaml` | Deployment + Service | Port 8003 |
+| `notification-service.yaml` | Deployment + Service | Port 8004 |
+| `frontend.yaml` | Deployment + Service | Nginx, port 80 |
+| `ingress.yaml` | Ingress | Traefik, `/api` + `/ws` ΓåÆ Kong, `/` ΓåÆ frontend |
+| `traefik-instana.yaml` | HelmChartConfig | Patches k3s Traefik: injects `INSTANA_AGENT_ENDPOINT` (host IP via Downward API) + `INSTANA_AGENT_ENDPOINT_PORT`, enables `--tracing.instana` |
