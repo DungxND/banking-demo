@@ -3,18 +3,20 @@
 # k3s manages Traefik via an internal Helm chart. The supported way to patch it
 # is a HelmChartConfig in kube-system. Apply with:
 #
-#   kubectl apply -f traefik-instana.yaml
-#   # — or — copy to /var/lib/rancher/k3s/server/manifests/ (k3s auto-applies)
+#   kubectl apply -f phase1-docker-to-k8s/traefik-instana.yaml
+#   kubectl -n kube-system rollout restart deployment/traefik
 #
 # What this does:
-#   1. Sends Traefik traces via OTLP/gRPC → Instana agent :4317 on the node IP
-#      (Traefik v3 removed --tracing.instana; OTLP is the replacement)
+#   1. Sends Traefik traces via OTLP/gRPC → Instana agent :4317 on the node IP.
+#      NODE_IP is injected via fieldRef so the endpoint resolves at pod start.
+#      OTEL_EXPORTER_OTLP_ENDPOINT is NOT used for gRPC — the endpoint must be
+#      set directly in tracing.otlp.grpc.endpoint as "host:port" (no scheme).
 #   2. Opens a dedicated metrics entrypoint on :9100 and exposes Prometheus
 #      metrics there — required by the Instana Traefik sensor for metrics collection
 #
 # References:
 #   https://www.ibm.com/docs/en/instana-observability/current?topic=technologies-monitoring-traefik
-#   https://doc.traefik.io/traefik/v3.7/migrate/v2-to-v3-details/#tracing
+#   https://doc.traefik.io/traefik/v3.x/observability/tracing/opentelemetry/
 #   https://docs.k3s.io/helm#customizing-packaged-components-with-helmchartconfig
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
@@ -25,9 +27,8 @@ spec:
   valuesContent: |-
     # -----------------------------------------------------------------------
     # Tracing via OTLP/gRPC (Traefik v3 — --tracing.instana removed in v3)
+    # NODE_IP is declared first so $(NODE_IP) resolves in the env block below.
     # -----------------------------------------------------------------------
-    # NODE_IP must be declared BEFORE OTEL_EXPORTER_OTLP_ENDPOINT so that
-    # Kubernetes $(NODE_IP) substitution resolves in the final pod spec.
     env:
       - name: NODE_IP
         valueFrom:
@@ -37,19 +38,31 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: status.hostIP
-      - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: "http://$(NODE_IP):4317"
 
-    # Traefik v3 Helm chart native tracing config (static fallback).
+    # tracing.otlp.grpc.endpoint must be "host:port" — no http:// scheme.
+    # $(NODE_IP) substitution is NOT supported inside valuesContent YAML strings;
+    # the env var approach does not work for the Helm chart tracing block.
+    # Solution: use the OTEL_EXPORTER_OTLP_TRACES_ENDPOINT env var which Traefik
+    # reads at runtime to override the grpc endpoint (gRPC uses port 4317).
+    # Traefik v3 honours OTEL_EXPORTER_OTLP_ENDPOINT for HTTP exporter only;
+    # for gRPC it honours OTEL_EXPORTER_OTLP_TRACES_ENDPOINT without scheme.
+    # We therefore enable HTTP OTLP so the env var takes effect.
     tracing:
       otlp:
-        grpc:
-          endpoint: "localhost:4317"
-          insecure: true
+        http:
+          endpoint: "http://localhost:4318/v1/traces"
+          insecureSkipVerify: true
 
+    # Override the endpoint at runtime with the real node IP via env var.
+    # Traefik reads OTEL_EXPORTER_OTLP_ENDPOINT for HTTP exporter.
+    # Must append /v1/traces for HTTP OTLP (gRPC does not need the path).
+    # This value is set as an additional env var that Traefik reads on startup.
+    # Note: env var expansion in Helm values strings is not supported, so we
+    # set this as an additionalArgument that Traefik resolves from the env.
     additionalArguments:
       - "--entrypoints.metrics.address=:9100"
       - "--metrics.prometheus.entryPoint=metrics"
+      - "--tracing.otlp.http.endpoint=http://$(NODE_IP):4318/v1/traces"
 
     # -----------------------------------------------------------------------
     # Prometheus metrics endpoint — required by the Instana Traefik sensor.

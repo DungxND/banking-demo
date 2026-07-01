@@ -97,7 +97,7 @@ com.instana.plugin.kong:
   status_code_group: '2xx,3xx,4xx,5xx'
   remote:
     - host: '127.0.0.1'
-      port: '32001'
+      port: '32001'        # Admin API port — sensor reads topology/config here
       availabilityZone: 'banking-ec2-prod'
       poll_rate: 30
       protocol: 'http'

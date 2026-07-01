@@ -1,8 +1,13 @@
-# Phase 1: Kong declarative config (ConfigMap)
-# Prometheus plugin enabled globally — required by the Instana Kong sensor for
-# latency, bandwidth, and request metrics.
+# Phase 1: Kong declarative config (ConfigMap — template)
+# Prometheus plugin — required by the Instana Kong sensor for
+# latency, bandwidth, and request metrics via /metrics on admin port.
 # upstream_health_metrics disabled: active health checks block the /metrics
 # response when upstream pods are slow, causing Instana sensor timeouts.
+# OpenTelemetry plugin — sends Kong spans to Instana agent via OTLP/HTTP :4318.
+# NODE_IP_PLACEHOLDER is substituted at pod start by the init container in
+# kong.yaml using the pod's status.hostIP — no hardcoded IP anywhere.
+# Propagation: extract+inject instana headers so the trace chain
+# Traefik → Kong → FastAPI is stitched into a single waterfall in Instana.
 # CORS plugins removed — handled at the frontend/ingress layer for k8s.
 apiVersion: v1
 kind: ConfigMap
@@ -10,7 +15,7 @@ metadata:
   name: kong-config
   namespace: banking
 data:
-  kong.yml: |
+  kong.yml.template: |
     _format_version: "3.0"
     _transform: true
 
@@ -21,6 +26,21 @@ data:
           latency_metrics: true
           bandwidth_metrics: true
           upstream_health_metrics: false
+
+      - name: opentelemetry
+        config:
+          traces_endpoint: "http://NODE_IP_PLACEHOLDER:4318/v1/traces"
+          resource_attributes:
+            service.name: "kong"
+          propagation:
+            extract:
+              - instana
+              - w3c
+            inject:
+              - instana
+              - w3c
+            default_format: "w3c"
+          sampling_rate: 1.0
 
     services:
       - name: auth-service
