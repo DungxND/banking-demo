@@ -1,4 +1,4 @@
-# Instana Agent configuration for banking-demo — Kubernetes (k3s on EC2)
+# Instana Agent configuration for banking-demo — Docker Compose on EC2
 # Mount at: /opt/instana/agent/etc/instana/configuration.yaml
 #
 # Hot-reloaded: most settings take effect without agent restart.
@@ -6,6 +6,7 @@
 
 # ---------------------------------------------------------------------------
 # Zone — groups this host in the Application Perspective filter drop-downs.
+# Without this the host appears in Infrastructure but NOT in the AP builder.
 # ---------------------------------------------------------------------------
 com.instana.zone:
   name: banking-ec2-prod
@@ -19,35 +20,10 @@ com.instana.tags:
   - project: banking-demo
 
 # ---------------------------------------------------------------------------
-# Kubernetes — host-agent mode (systemd on EC2, NOT Helm/Operator).
-#
-# With a host-agent install, there is NO k8sensor Deployment in the cluster.
-# The host agent itself monitors Kubernetes by reading the kubeconfig directly.
-# enabled: true is required — without it, no pods/services/namespaces are
-# reported to Instana at all.
-#
-# The k8sensor Deployment (kubectl get deployments -l app=k8sensor) only exists
-# when the agent is installed via Helm or the Operator — not applicable here.
-#
-# Prerequisite: kubeconfig must be world-readable:
-#   sudo chmod 644 /etc/rancher/k3s/k3s.yaml
-# ---------------------------------------------------------------------------
-com.instana.plugin.kubernetes:
-  enabled: true
-  kubeconfig: /etc/rancher/k3s/k3s.yaml
-
-# ---------------------------------------------------------------------------
-# Traefik sensor — auto-deployed by the agent; poll_rate controls scrape interval
-# ---------------------------------------------------------------------------
-com.instana.plugin.traefik:
-  enabled: true
-  poll_rate: 1
-
-# ---------------------------------------------------------------------------
-# OpenTelemetry — accept OTLP from pods (gRPC :4317, HTTP :4318)
-# The agent must listen on 0.0.0.0 so pods on the k3s CNI network
-# (10.42.x.x) can reach it via the node IP (status.hostIP).
-# Without explicit grpc.listenAddress, the agent defaults to localhost only.
+# OpenTelemetry — accept OTLP from Python services (gRPC :4317, HTTP :4318)
+# listenAddress must be 0.0.0.0 so Docker containers reaching the host via
+# host.docker.internal (which resolves to the docker0 bridge IP, not 127.0.0.1)
+# can deliver spans. Without this the agent only listens on localhost.
 # ---------------------------------------------------------------------------
 com.instana.plugin.opentelemetry:
   enabled: true
@@ -67,40 +43,20 @@ com.instana.plugin.python:
 # ---------------------------------------------------------------------------
 # PostgreSQL monitoring
 # Requires track_counts, track_activities, track_io_timing ON in postgresql.conf
+# postgres is exposed on host port 5432 (see docker-compose.yml ports mapping).
 # ---------------------------------------------------------------------------
 com.instana.plugin.postgresql:
   user: banking
   password: bankingpass
   database: banking
-
-# ---------------------------------------------------------------------------
-# Kong API Gateway monitoring
-# Remote mode — agent is on the host, Kong admin is inside the cluster.
-# Kong admin is exposed via NodePort 32001 so the host agent reaches it
-# via localhost (no k8s DNS resolution needed from the host).
-# No auth — Kong runs in DB-less mode with no RBAC.
-# Prometheus plugin must be enabled in kong-configmap.yaml (it is).
-# poll_rate minimum is 30s per Instana docs.
-# disabled_metrics is empty — collect everything for the demo.
-# ---------------------------------------------------------------------------
-com.instana.plugin.kong:
-  enabled: true
-  dataset_size: 10
-  status_code_group: '2xx,3xx,4xx,5xx'
-  remote:
-    - host: 'localhost'
-      port: '32001'
-      availabilityZone: 'banking-ec2-prod'
-      poll_rate: 30
-      protocol: 'http'
+  host: localhost
+  port: 5432
 
 # ---------------------------------------------------------------------------
 # Redis monitoring
-# No password — banking-demo Redis runs without auth (default config).
-# poll_rate: 10s is sufficient for a demo; drop to 1 for high-fidelity metrics.
+# redis is exposed on host port 6379 (see docker-compose.yml ports mapping).
+# No password — banking-demo Redis runs without auth.
 # CONFIG command must not be disabled or renamed on the Redis side.
-# Redis is exposed via NodePort 32002 so the host agent reaches it via
-# localhost (no k8s DNS resolution needed from the host, no hardcoded pod IP).
 # ---------------------------------------------------------------------------
 com.instana.plugin.redis:
   username: ''
@@ -108,11 +64,26 @@ com.instana.plugin.redis:
   poll_rate: 10
   hosts:
     - host: 'localhost'
-      port: 32002
+      port: 6379
 
 # ---------------------------------------------------------------------------
-# Tracing — forward OTel traceparent/tracestate headers across services,
-# and accept spans forwarded by Traefik (instana-t / instana-s / x-instana-*)
+# Kong API Gateway monitoring
+# Kong admin API is exposed on host port 8001 (see docker-compose.yml).
+# Prometheus plugin must be enabled in kong/kong.yml (add if not present).
+# ---------------------------------------------------------------------------
+com.instana.plugin.kong:
+  enabled: true
+  dataset_size: 10
+  status_code_group: '2xx,3xx,4xx,5xx'
+  remote:
+    - host: 'localhost'
+      port: '8001'
+      availabilityZone: 'banking-ec2-prod'
+      poll_rate: 30
+      protocol: 'http'
+
+# ---------------------------------------------------------------------------
+# Tracing — forward OTel traceparent/tracestate headers across services
 # ---------------------------------------------------------------------------
 com.instana.tracing:
   extra-http-headers:

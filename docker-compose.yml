@@ -35,6 +35,8 @@ services:
   kong:
     image: kong:3.9
     container_name: kong-gateway
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       KONG_DATABASE: "off"  # Use declarative config mode (no database)
       KONG_DECLARATIVE_CONFIG: /kong/kong.yml
@@ -81,10 +83,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       SESSION_TTL_SECONDS: 86400
       CORS_ORIGINS: http://localhost:3000
-      INSTANA_SERVICE_NAME: auth-service
-      INSTANA_AGENT_HOST: ${INSTANA_AGENT_HOST:-host.docker.internal}
-      INSTANA_AGENT_PORT: "42699"
-      INSTANA_ZONE: banking-ec2-prod
+      OTEL_SERVICE_NAME: auth-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=banking-demo,deployment.environment=production
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -110,10 +112,10 @@ services:
       DATABASE_URL: postgresql://banking:bankingpass@postgres:5432/banking
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: http://localhost:3000
-      INSTANA_SERVICE_NAME: account-service
-      INSTANA_AGENT_HOST: ${INSTANA_AGENT_HOST:-host.docker.internal}
-      INSTANA_AGENT_PORT: "42699"
-      INSTANA_ZONE: banking-ec2-prod
+      OTEL_SERVICE_NAME: account-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=banking-demo,deployment.environment=production
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -139,10 +141,10 @@ services:
       DATABASE_URL: postgresql://banking:bankingpass@postgres:5432/banking
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: http://localhost:3000
-      INSTANA_SERVICE_NAME: transfer-service
-      INSTANA_AGENT_HOST: ${INSTANA_AGENT_HOST:-host.docker.internal}
-      INSTANA_AGENT_PORT: "42699"
-      INSTANA_ZONE: banking-ec2-prod
+      OTEL_SERVICE_NAME: transfer-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=banking-demo,deployment.environment=production
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,10 +170,10 @@ services:
       DATABASE_URL: postgresql://banking:bankingpass@postgres:5432/banking
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: http://localhost:3000
-      INSTANA_SERVICE_NAME: notification-service
-      INSTANA_AGENT_HOST: ${INSTANA_AGENT_HOST:-host.docker.internal}
-      INSTANA_AGENT_PORT: "42699"
-      INSTANA_ZONE: banking-ec2-prod
+      OTEL_SERVICE_NAME: notification-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=banking-demo,deployment.environment=production
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
     depends_on:
       postgres:
         condition: service_healthy
