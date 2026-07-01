@@ -1,0 +1,29 @@
+name: K8s Deploy
+
+on:
+  push:
+    branches: [instana]
+    paths:
+      - 'phase1-docker-to-k8s/**'
+      - 'instana/configuration.yaml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: kubectl apply
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /opt/banking-demo
+            git pull
+            kubectl apply -f phase1-docker-to-k8s/
+            kubectl rollout restart deployment -n banking
+            kubectl rollout status deployment -n banking --timeout=120s
