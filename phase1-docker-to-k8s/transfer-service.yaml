@@ -71,6 +71,8 @@ spec:
                   fieldPath: status.hostIP
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://$(NODE_IP):4317"
+            - name: AUTOWRAPT_BOOTSTRAP
+              value: instana
           readinessProbe:
             httpGet:
               path: /health

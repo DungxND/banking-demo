@@ -87,6 +87,7 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=banking-demo,deployment.environment=production
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
+      AUTOWRAPT_BOOTSTRAP: instana
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,6 +117,7 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=banking-demo,deployment.environment=production
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
+      AUTOWRAPT_BOOTSTRAP: instana
     depends_on:
       postgres:
         condition: service_healthy
@@ -145,6 +147,7 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=banking-demo,deployment.environment=production
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
+      AUTOWRAPT_BOOTSTRAP: instana
     depends_on:
       postgres:
         condition: service_healthy
@@ -174,6 +177,7 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=banking-demo,deployment.environment=production
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
+      AUTOWRAPT_BOOTSTRAP: instana
     depends_on:
       postgres:
         condition: service_healthy

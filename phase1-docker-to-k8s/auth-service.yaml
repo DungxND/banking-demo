@@ -73,6 +73,12 @@ spec:
                   fieldPath: status.hostIP
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://$(NODE_IP):4317"
+            # Instana process-level sensor — resolves python_sensor_not_installed.
+            # Activates the instana package via autowrapt (no code changes needed).
+            # Works alongside OTel: sensor provides CPU/mem/GC metrics + service
+            # fingerprinting; OTel provides distributed traces via OTLP/gRPC.
+            - name: AUTOWRAPT_BOOTSTRAP
+              value: instana
           readinessProbe:
             httpGet:
               path: /health
