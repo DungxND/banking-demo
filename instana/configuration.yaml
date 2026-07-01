@@ -37,6 +37,14 @@ com.instana.plugin.kubernetes:
   kubeconfig: /etc/rancher/k3s/k3s.yaml
 
 # ---------------------------------------------------------------------------
+# Nginx — name the frontend service explicitly so it appears as 'frontend'
+# rather than 'nginx' or 'unspecified' in the Instana UI.
+# The agent matches by the process binary name detected inside the container.
+# ---------------------------------------------------------------------------
+com.instana.plugin.nginx:
+  service_name: frontend
+
+# ---------------------------------------------------------------------------
 # Traefik sensor — auto-deployed by the agent; poll_rate controls scrape interval
 # ---------------------------------------------------------------------------
 com.instana.plugin.traefik:
