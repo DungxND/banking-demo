@@ -1,0 +1,192 @@
+name: Docker Build & Push
+
+on:
+  push:
+    branches: [main, instana]
+    paths:
+      - 'services/**'
+      - 'common/**'
+      - 'frontend/**'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag (e.g. v2, v3). Leave blank to use short SHA.'
+        required: false
+        default: 'v2'
+        type: string
+      services:
+        description: 'Services to build'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - auth-service
+          - account-service
+          - transfer-service
+          - notification-service
+          - frontend
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/dungxnd/banking-demo
+
+jobs:
+  # ----------------------------------------------------------------
+  # Decide which tag to use and which services to build
+  # ----------------------------------------------------------------
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      services: ${{ steps.resolve.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect changed services
+        uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'push'
+        with:
+          filters: |
+            auth-service:
+              - 'services/auth-service/**'
+              - 'common/**'
+            account-service:
+              - 'services/account-service/**'
+              - 'common/**'
+            transfer-service:
+              - 'services/transfer-service/**'
+              - 'common/**'
+            notification-service:
+              - 'services/notification-service/**'
+              - 'common/**'
+            frontend:
+              - 'frontend/**'
+
+      - name: Resolve tag and services list
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+            SVCS="${{ github.event.inputs.services }}"
+            if [ "$SVCS" == "all" ]; then
+              SVCS="auth-service,account-service,transfer-service,notification-service,frontend"
+            fi
+          else
+            # Auto-push: tag = short SHA
+            TAG="$(git rev-parse --short=7 HEAD)"
+            SVCS=""
+            [ "${{ steps.filter.outputs.auth-service }}"        == "true" ] && SVCS="$SVCS,auth-service"
+            [ "${{ steps.filter.outputs.account-service }}"     == "true" ] && SVCS="$SVCS,account-service"
+            [ "${{ steps.filter.outputs.transfer-service }}"    == "true" ] && SVCS="$SVCS,transfer-service"
+            [ "${{ steps.filter.outputs.notification-service }}" == "true" ] && SVCS="$SVCS,notification-service"
+            [ "${{ steps.filter.outputs.frontend }}"            == "true" ] && SVCS="$SVCS,frontend"
+            SVCS="${SVCS#,}"
+            [ -z "$SVCS" ] && SVCS="none"
+          fi
+          echo "tag=$TAG"       >> $GITHUB_OUTPUT
+          echo "services=$SVCS" >> $GITHUB_OUTPUT
+          echo "Resolved: tag=$TAG  services=$SVCS"
+
+  # ----------------------------------------------------------------
+  # Build + push each service in parallel
+  # ----------------------------------------------------------------
+  build:
+    name: ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: needs.prepare.outputs.services != 'none'
+    permissions:
+      packages: write   # needed to push to ghcr.io
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: auth-service
+            dockerfile: services/auth-service/Dockerfile
+            context: .
+          - service: account-service
+            dockerfile: services/account-service/Dockerfile
+            context: .
+          - service: transfer-service
+            dockerfile: services/transfer-service/Dockerfile
+            context: .
+          - service: notification-service
+            dockerfile: services/notification-service/Dockerfile
+            context: .
+          - service: frontend
+            dockerfile: frontend/Dockerfile
+            context: frontend
+    steps:
+      - name: Check if this service should build
+        id: gate
+        run: |
+          SVCS="${{ needs.prepare.outputs.services }}"
+          SVC="${{ matrix.service }}"
+          if [ "$SVCS" == "all" ] || echo "$SVCS" | grep -q "$SVC"; then
+            echo "build=true" >> $GITHUB_OUTPUT
+          else
+            echo "build=false" >> $GITHUB_OUTPUT
+            echo "Skipping $SVC (not in [$SVCS])"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.build == 'true'
+
+      - name: Set up Docker Buildx
+        if: steps.gate.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        if: steps.gate.outputs.build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }}
+        if: steps.gate.outputs.build == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ needs.prepare.outputs.tag }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  # ----------------------------------------------------------------
+  # Summary
+  # ----------------------------------------------------------------
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    if: always()
+    steps:
+      - name: Write summary
+        run: |
+          TAG="${{ needs.prepare.outputs.tag }}"
+          SVCS="${{ needs.prepare.outputs.services }}"
+          echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Tag** | \`$TAG\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Services** | \`$SVCS\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build result** | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$SVCS" != "none" ] && [ "${{ needs.build.result }}" == "success" ]; then
+            echo "### Images pushed" >> $GITHUB_STEP_SUMMARY
+            for svc in $(echo "$SVCS" | tr ',' ' '); do
+              echo "- \`ghcr.io/dungxnd/banking-demo/$svc:$TAG\`" >> $GITHUB_STEP_SUMMARY
+            done
+          fi
