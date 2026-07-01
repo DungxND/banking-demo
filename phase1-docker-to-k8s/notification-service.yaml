@@ -30,7 +30,7 @@ spec:
         - name: github-registry
       containers:
         - name: notification-service
-          image: ghcr.io/dungxnd/banking-demo/notification-service:v2
+          image: ghcr.io/dungxnd/banking-demo/notification-service:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

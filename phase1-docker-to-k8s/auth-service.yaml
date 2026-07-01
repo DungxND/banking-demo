@@ -30,7 +30,7 @@ spec:
         - name: github-registry
       containers:
         - name: auth-service
-          image: ghcr.io/dungxnd/banking-demo/auth-service:v2
+          image: ghcr.io/dungxnd/banking-demo/auth-service:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

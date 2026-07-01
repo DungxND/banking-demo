@@ -30,7 +30,7 @@ spec:
         - name: github-registry
       containers:
         - name: account-service
-          image: ghcr.io/dungxnd/banking-demo/account-service:v2
+          image: ghcr.io/dungxnd/banking-demo/account-service:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

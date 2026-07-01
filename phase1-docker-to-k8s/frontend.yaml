@@ -28,7 +28,7 @@ spec:
         - name: github-registry
       containers:
         - name: frontend
-          image: ghcr.io/dungxnd/banking-demo/frontend:v1
+          image: ghcr.io/dungxnd/banking-demo/frontend:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

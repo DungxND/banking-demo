@@ -30,7 +30,7 @@ spec:
         - name: github-registry
       containers:
         - name: transfer-service
-          image: ghcr.io/dungxnd/banking-demo/transfer-service:v2
+          image: ghcr.io/dungxnd/banking-demo/transfer-service:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
