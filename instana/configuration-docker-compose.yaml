@@ -63,7 +63,7 @@ com.instana.plugin.redis:
   password: ''
   poll_rate: 10
   hosts:
-    - host: 'localhost'
+    - host: '127.0.0.1'
       port: 6379
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ com.instana.plugin.kong:
   dataset_size: 10
   status_code_group: '2xx,3xx,4xx,5xx'
   remote:
-    - host: 'localhost'
+    - host: '127.0.0.1'
       port: '8001'
       availabilityZone: 'banking-ec2-prod'
       poll_rate: 30
