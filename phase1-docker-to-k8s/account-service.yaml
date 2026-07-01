@@ -73,6 +73,8 @@ spec:
               value: "http://$(NODE_IP):4317"
             - name: AUTOWRAPT_BOOTSTRAP
               value: instana
+            - name: INSTANA_SERVICE_NAME
+              value: account-service
           readinessProbe:
             httpGet:
               path: /health

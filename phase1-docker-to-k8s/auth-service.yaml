@@ -79,6 +79,8 @@ spec:
             # fingerprinting; OTel provides distributed traces via OTLP/gRPC.
             - name: AUTOWRAPT_BOOTSTRAP
               value: instana
+            - name: INSTANA_SERVICE_NAME
+              value: auth-service
           readinessProbe:
             httpGet:
               path: /health

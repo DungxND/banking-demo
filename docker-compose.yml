@@ -88,6 +88,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
       AUTOWRAPT_BOOTSTRAP: instana
+      INSTANA_SERVICE_NAME: auth-service
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,6 +119,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
       AUTOWRAPT_BOOTSTRAP: instana
+      INSTANA_SERVICE_NAME: account-service
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,6 +150,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
       AUTOWRAPT_BOOTSTRAP: instana
+      INSTANA_SERVICE_NAME: transfer-service
     depends_on:
       postgres:
         condition: service_healthy
@@ -178,6 +181,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
       AUTOWRAPT_BOOTSTRAP: instana
+      INSTANA_SERVICE_NAME: notification-service
     depends_on:
       postgres:
         condition: service_healthy
