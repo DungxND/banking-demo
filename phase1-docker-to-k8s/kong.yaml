@@ -26,30 +26,6 @@ spec:
           type: RuntimeDefault
       imagePullSecrets:
         - name: dockerhub-registry
-      # Init container: substitute NODE_IP into the kong.yml template so the
-      # OpenTelemetry plugin endpoint is set to the actual host IP at pod start.
-      # No hardcoded IP anywhere — status.hostIP is resolved by Kubernetes.
-      initContainers:
-        - name: kong-config-init
-          image: busybox:1.36
-          command:
-            - sh
-            - -c
-            - |
-              sed "s/NODE_IP_PLACEHOLDER/${NODE_IP}/g" \
-                /kong-template/kong.yml.template > /kong-rendered/kong.yml
-              echo "Kong config rendered with NODE_IP=${NODE_IP}"
-          env:
-            - name: NODE_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-          volumeMounts:
-            - name: kong-config-template
-              mountPath: /kong-template
-              readOnly: true
-            - name: kong-config-rendered
-              mountPath: /kong-rendered
       containers:
         - name: kong
           image: kong:3.9
@@ -85,7 +61,7 @@ spec:
             - containerPort: 8001
               name: admin
           volumeMounts:
-            - name: kong-config-rendered
+            - name: kong-config
               mountPath: /kong
               readOnly: true
           resources:
@@ -110,11 +86,9 @@ spec:
             timeoutSeconds: 10
             failureThreshold: 3
       volumes:
-        - name: kong-config-template
+        - name: kong-config
           configMap:
             name: kong-config
-        - name: kong-config-rendered
-          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
