@@ -50,6 +50,12 @@ def init_tracing(service_name: str) -> None:
         except Exception:
             pass
 
+        try:
+            from opentelemetry.instrumentation.aio_pika import AioPikaInstrumentor
+            AioPikaInstrumentor().instrument()
+        except Exception:
+            pass
+
         _log.info("OTel tracing initialised: service=%s endpoint=%s", service_name, endpoint)
     except Exception:
         pass

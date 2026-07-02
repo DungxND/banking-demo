@@ -124,17 +124,14 @@ com.instana.plugin.postgresql:
 
 # ---------------------------------------------------------------------------
 # RabbitMQ monitoring
-# /final: RabbitMQ management API (port 15672) is headless ClusterIP only.
-# The host agent on the EC2 node cannot reach it.
-# Client-side tracing (opentelemetry-instrumentation-pika) in the Python
-# services produces RabbitMQ spans that flow to Instana via OTLP.
-#
-# To enable when management port is reachable (e.g. via a debug NodePort):
-#   com.instana.plugin.rabbitmq:
-#     user: 'guest'
-#     password: 'guest'
-#     poll_rate: 5
+# /final: Agent auto-discovered RabbitMQ at 10.42.0.131:15672 (confirmed in
+# agent log: "RabbitMQ API http://10.42.0.131:15672 is reachable").
+# Credentials match the rabbitmq-connection-secret (banking/bankingpass).
 # ---------------------------------------------------------------------------
+com.instana.plugin.rabbitmq:
+  user: 'banking'
+  password: 'bankingpass'
+  poll_rate: 5
 
 # ---------------------------------------------------------------------------
 # Tracing — forward OTel traceparent/tracestate headers across services,
