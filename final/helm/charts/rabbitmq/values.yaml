@@ -39,8 +39,12 @@ rabbitmq:
       seccompProfile:
         type: RuntimeDefault
       fsGroup: 999
+      runAsUser: 999        # run as rabbitmq user — ensures .erlang.cookie is written as uid 999
+      runAsGroup: 999
     container:
       allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 999
   hook:
     preInstall: true
     preUpgrade: true
