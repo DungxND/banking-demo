@@ -1,6 +1,6 @@
 """
-API Producer — Phase 8
-Receives HTTP from Kong, publishes to RabbitMQ, waits for response via Redis.
+API Producer — RPC edition
+Receives HTTP from Kong, publishes to RabbitMQ, awaits response via Direct Reply-to.
 """
 import os
 import json
@@ -9,32 +9,25 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import aio_pika
-from redis.asyncio import Redis
 
 from common.rabbitmq_utils import path_to_queue, publish_and_wait
-from common.redis_utils import create_redis_client
 from common.logging_utils import get_json_logger, log_event, log_error_event, setup_exception_logging, RequestLogMiddleware
 from common.observability import instrument_fastapi
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 CORS_ORIGINS = "http://localhost:3000,https://npd-banking.co,http://npd-banking.co"
 
 logger = get_json_logger("api-producer")
 
-redis: Redis | None = None
 rmq_connection: aio_pika.Connection | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global redis, rmq_connection
-    redis = await create_redis_client(REDIS_URL, logger=logger)
+    global rmq_connection
     rmq_connection = await aio_pika.connect_robust(RABBITMQ_URL)
     log_event(logger, "rabbitmq_connected")
     yield
-    if redis:
-        await redis.close()
     if rmq_connection:
         await rmq_connection.close()
 
@@ -54,13 +47,11 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    """Health check — phải định nghĩa TRƯỚC catch-all /{path:path}."""
     try:
-        if redis:
-            await redis.ping()
-        return {"status": "healthy", "service": "api-producer", "redis": "ok"}
+        if rmq_connection and not rmq_connection.is_closed:
+            return {"status": "healthy", "service": "api-producer", "rabbitmq": "ok"}
+        return JSONResponse(status_code=503, content={"status": "unhealthy", "rabbitmq": "closed"})
     except Exception as e:
-        log_error_event(logger, "health_check_failed", exc=e, service="api-producer")
         return JSONResponse(status_code=503, content={"status": "unhealthy", "error": str(e)})
 
 
@@ -104,7 +95,7 @@ async def proxy_to_queue(request: Request, path: str):
 
     try:
         async with rmq_connection.channel() as channel:
-            result = await publish_and_wait(redis, channel, queue_name, payload, headers, logger=logger)
+            result = await publish_and_wait(channel, queue_name, payload, headers, logger=logger)
     except TimeoutError as e:
         log_error_event(logger, "producer_timeout", exc=e, path=full_path, service="api-producer")
         return JSONResponse(status_code=504, content={"detail": "Gateway timeout"})

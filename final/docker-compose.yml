@@ -91,11 +91,8 @@ services:
       dockerfile: producer/Dockerfile
     container_name: api-producer
     environment:
-      REDIS_URL: redis://redis:6379/0
       RABBITMQ_URL: amqp://banking:bankingpass@rabbitmq:5672/
     depends_on:
-      redis:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     healthcheck:

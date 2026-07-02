@@ -10,8 +10,7 @@ api-producer:
     portName: http
   secretRef:
     name: banking-db-secret
-    keys:
-      redisUrl: REDIS_URL
+    keys: {}
   # RABBITMQ_URL read from a separate Secret (create manually, do NOT commit)
   rabbitmqSecretRef:
     name: rabbitmq-connection-secret

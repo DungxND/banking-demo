@@ -1,7 +1,8 @@
 """
-Transfer Service — Phase 8 Consumer
-Consumes from transfer.requests, processes, stores response in Redis.
+Transfer Service — RPC Consumer
+Consumes from transfer.requests, processes, replies via RabbitMQ Direct Reply-to.
 FastAPI + instrument_fastapi để xuất traces sang Jaeger (health check tạo span).
+Redis is kept for publish_notify (WebSocket push to notification-service).
 """
 import os
 import asyncio
@@ -15,7 +16,7 @@ from fastapi import FastAPI
 from common.db import SessionLocal, engine, Base, log_db_pool_status
 from common.models import User, Transfer, Notification
 from common.redis_utils import get_user_id_from_session, publish_notify, create_redis_client
-from common.rabbitmq_utils import store_response
+from common.rabbitmq_utils import reply_rpc
 from common.logging_utils import get_json_logger, log_event, log_error_event, mask_amount, mask_account_number, should_log_request_flow
 from common.observability import instrument_fastapi, get_tracer
 
@@ -101,48 +102,47 @@ async def handle_transfer(payload: dict, headers: dict, trace: dict) -> dict:
         db.close()
 
 
-async def process_message(message: IncomingMessage):
-    async with message.process():
-        body = {}
-        try:
-            body = json.loads(message.body.decode())
-            correlation_id = body.get("correlation_id", "")
-            path = body.get("path", "")
-            action = body.get("action", "")
-            payload = body.get("payload", {})
-            headers = body.get("headers", {})
-            tracer = get_tracer("transfer-service")
-            span_ctx = tracer.start_as_current_span("transfer.process", attributes={"messaging.operation": "process", "action": action, "correlation_id": str(correlation_id or "")}) if tracer else nullcontext()
-            with span_ctx:
-                if should_log_request_flow():
-                    log_event(logger, "rmq_message_received", queue="transfer.requests", correlation_id=correlation_id, action=action, path=path)
-                if action == "health":
-                    result = {"status": 200, "body": {"status": "healthy", "service": "transfer", "database": "ok", "redis": "ok"}}
-                else:
-                    trace = {"correlation_id": correlation_id, "path": path, "action": action}
-                    result = await handle_transfer(payload, headers, trace)
-                await store_response(redis, correlation_id, result)
-        except Exception as e:
-            log_error_event(
-                logger,
-                "consumer_error",
-                exc=e,
-                correlation_id=body.get("correlation_id", ""),
-                path=body.get("path", ""),
-                action=body.get("action", ""),
-                service="transfer-service",
-                queue="transfer.requests",
-            )
-            if body.get("correlation_id"):
-                await store_response(redis, body["correlation_id"], {"status": 500, "body": {"detail": str(e)}}, logger=logger)
-
-
 async def consume():
     import aio_pika
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=5)
     queue = await channel.declare_queue("transfer.requests", durable=True)
+
+    async def process_message(message: IncomingMessage):
+        async with message.process():
+            body = {}
+            try:
+                body = json.loads(message.body.decode())
+                correlation_id = body.get("correlation_id", "")
+                path = body.get("path", "")
+                action = body.get("action", "")
+                payload = body.get("payload", {})
+                headers = body.get("headers", {})
+                tracer = get_tracer("transfer-service")
+                span_ctx = tracer.start_as_current_span("transfer.process", attributes={"messaging.operation": "process", "action": action, "correlation_id": str(correlation_id or "")}) if tracer else nullcontext()
+                with span_ctx:
+                    if should_log_request_flow():
+                        log_event(logger, "rmq_message_received", queue="transfer.requests", correlation_id=correlation_id, action=action, path=path)
+                    if action == "health":
+                        result = {"status": 200, "body": {"status": "healthy", "service": "transfer", "database": "ok", "redis": "ok"}}
+                    else:
+                        trace = {"correlation_id": correlation_id, "path": path, "action": action}
+                        result = await handle_transfer(payload, headers, trace)
+                    await reply_rpc(message, channel, result, logger=logger)
+            except Exception as e:
+                log_error_event(
+                    logger,
+                    "consumer_error",
+                    exc=e,
+                    correlation_id=body.get("correlation_id", ""),
+                    path=body.get("path", ""),
+                    action=body.get("action", ""),
+                    service="transfer-service",
+                    queue="transfer.requests",
+                )
+                await reply_rpc(message, channel, {"status": 500, "body": {"detail": str(e)}}, logger=logger)
+
     await queue.consume(process_message)
     log_event(logger, "rabbitmq_connected")
     log_event(

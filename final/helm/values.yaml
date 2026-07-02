@@ -141,15 +141,14 @@ notification-service:
       capabilities:
         drop: ["ALL"]
 
-# api-producer has no databaseUrl (stateless HTTP proxy)
+# api-producer has no databaseUrl and no redisUrl (stateless HTTP proxy, RPC via RMQ)
 api-producer:
   image:
     repository: ghcr.io/dungxnd/banking-demo/api-producer
     tag: latest
   secretRef:
     name: banking-db-secret
-    keys:
-      redisUrl: REDIS_URL
+    keys: {}
   rabbitmqSecretRef:
     name: rabbitmq-connection-secret
     key: RABBITMQ_URL

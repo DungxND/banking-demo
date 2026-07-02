@@ -1,6 +1,6 @@
 """
-Account Service — Phase 8 Consumer
-Consumes from account.requests, processes, stores response in Redis.
+Account Service — RPC Consumer
+Consumes from account.requests, processes, replies via RabbitMQ Direct Reply-to.
 FastAPI + instrument_fastapi để xuất traces sang Jaeger (health check tạo span).
 """
 import os
@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from common.db import SessionLocal, engine, Base, log_db_pool_status
 from common.models import User, Transfer, Notification
 from common.redis_utils import get_user_id_from_session, create_redis_client
-from common.rabbitmq_utils import store_response
+from common.rabbitmq_utils import reply_rpc
 from common.logging_utils import get_json_logger, log_event, log_error_event, should_log_request_flow
 from common.observability import instrument_fastapi, get_tracer
 
@@ -158,56 +158,55 @@ async def handle_admin_user_detail(user_id: int, headers: dict) -> dict:
         db.close()
 
 
-async def process_message(message: IncomingMessage):
-    async with message.process():
-        body = {}
-        try:
-            body = json.loads(message.body.decode())
-            correlation_id = body.get("correlation_id")
-            path = body.get("path", "")
-            action = body.get("action", "")
-            payload = body.get("payload", {})
-            headers = body.get("headers", {})
-            tracer = get_tracer("account-service")
-            span_ctx = tracer.start_as_current_span("account.process", attributes={"messaging.operation": "process", "action": action, "correlation_id": str(correlation_id or "")}) if tracer else nullcontext()
-            with span_ctx:
-                if should_log_request_flow():
-                    log_event(logger, "rmq_message_received", queue="account.requests", correlation_id=correlation_id, action=action, path=path)
-                if action == "health":
-                    result = {"status": 200, "body": {"status": "healthy", "service": "account", "database": "ok", "redis": "ok"}}
-                elif action == "me":
-                    result = await handle_me(payload, headers)
-                elif action == "balance":
-                    result = await handle_balance(payload, headers)
-                elif action == "lookup":
-                    result = await handle_lookup(payload, headers)
-                elif action == "admin/stats" or "admin/stats" in path:
-                    result = await handle_admin_stats(payload, headers)
-                elif action == "admin/users" or "admin/users" in path:
-                    if "/admin/users/" in path and path.split("/admin/users/")[-1].isdigit():
-                        uid = int(path.split("/admin/users/")[-1].split("/")[0])
-                        result = await handle_admin_user_detail(uid, headers)
-                    else:
-                        result = await handle_admin_users(payload, headers)
-                elif "admin/transfers" in (path or ""):
-                    result = await handle_admin_transfers(payload, headers)
-                elif "admin/notifications" in (path or ""):
-                    result = await handle_admin_notifications(payload, headers)
-                else:
-                    result = {"status": 404, "body": {"detail": f"Unknown action: {action}"}}
-                await store_response(redis, correlation_id, result, logger=logger)
-        except Exception as e:
-            log_error_event(logger, "consumer_error", exc=e, correlation_id=body.get("correlation_id"), service="account-service", queue="account.requests")
-            if body.get("correlation_id"):
-                await store_response(redis, body["correlation_id"], {"status": 500, "body": {"detail": str(e)}}, logger=logger)
-
-
 async def consume():
     import aio_pika
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=5)
     queue = await channel.declare_queue("account.requests", durable=True)
+
+    async def process_message(message: IncomingMessage):
+        async with message.process():
+            body = {}
+            try:
+                body = json.loads(message.body.decode())
+                correlation_id = body.get("correlation_id")
+                path = body.get("path", "")
+                action = body.get("action", "")
+                payload = body.get("payload", {})
+                headers = body.get("headers", {})
+                tracer = get_tracer("account-service")
+                span_ctx = tracer.start_as_current_span("account.process", attributes={"messaging.operation": "process", "action": action, "correlation_id": str(correlation_id or "")}) if tracer else nullcontext()
+                with span_ctx:
+                    if should_log_request_flow():
+                        log_event(logger, "rmq_message_received", queue="account.requests", correlation_id=correlation_id, action=action, path=path)
+                    if action == "health":
+                        result = {"status": 200, "body": {"status": "healthy", "service": "account", "database": "ok", "redis": "ok"}}
+                    elif action == "me":
+                        result = await handle_me(payload, headers)
+                    elif action == "balance":
+                        result = await handle_balance(payload, headers)
+                    elif action == "lookup":
+                        result = await handle_lookup(payload, headers)
+                    elif action == "admin/stats" or "admin/stats" in path:
+                        result = await handle_admin_stats(payload, headers)
+                    elif action == "admin/users" or "admin/users" in path:
+                        if "/admin/users/" in path and path.split("/admin/users/")[-1].isdigit():
+                            uid = int(path.split("/admin/users/")[-1].split("/")[0])
+                            result = await handle_admin_user_detail(uid, headers)
+                        else:
+                            result = await handle_admin_users(payload, headers)
+                    elif "admin/transfers" in (path or ""):
+                        result = await handle_admin_transfers(payload, headers)
+                    elif "admin/notifications" in (path or ""):
+                        result = await handle_admin_notifications(payload, headers)
+                    else:
+                        result = {"status": 404, "body": {"detail": f"Unknown action: {action}"}}
+                    await reply_rpc(message, channel, result, logger=logger)
+            except Exception as e:
+                log_error_event(logger, "consumer_error", exc=e, correlation_id=body.get("correlation_id"), service="account-service", queue="account.requests")
+                await reply_rpc(message, channel, {"status": 500, "body": {"detail": str(e)}}, logger=logger)
+
     await queue.consume(process_message)
     log_event(logger, "rabbitmq_connected")
     log_event(logger, "account_consumer_started", queue="account.requests")
