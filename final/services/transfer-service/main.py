@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager, nullcontext
 from sqlalchemy import select
 from redis.asyncio import Redis
 from aio_pika import IncomingMessage
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 from common.db import SessionLocal, engine, Base, log_db_pool_status
 from common.models import User, Transfer, Notification
@@ -24,10 +24,7 @@ from common.rabbitmq_utils import reply_rpc, create_connection
 from common.logging_utils import get_json_logger, log_event, log_error_event, mask_amount, mask_account_number, should_log_request_flow
 from common.observability import instrument_fastapi, get_tracer
 
-Base.metadata.create_all(bind=engine)
-
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
 logger = get_json_logger("transfer-service")
 redis: Redis | None = None
@@ -55,62 +52,60 @@ async def handle_transfer(payload: dict, headers: dict, trace: dict) -> dict:
     if to_acct and not to_acct.isdigit():
         log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="invalid_account_format", service="transfer-service")
         return {"status": 400, "body": {"detail": "to_account_number must be digits only"}}
-    db = SessionLocal()
-    try:
-        sender = db.execute(select(User).where(User.id == user_id).with_for_update()).scalar_one_or_none()
-        if not sender:
-            log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="sender_not_found", user_id=user_id, service="transfer-service")
-            return {"status": 404, "body": {"detail": "Sender not found"}}
-        if to_phone:
-            receiver = db.execute(select(User).where(User.phone == to_phone).with_for_update()).scalar_one_or_none()
-        elif to_acct:
-            receiver = db.execute(select(User).where(User.account_number == to_acct).with_for_update()).scalar_one_or_none()
-        else:
-            receiver = db.execute(select(User).where(User.username == to_username).with_for_update()).scalar_one_or_none()
-        if not receiver:
-            log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="receiver_not_found", to_account=to_acct or None, to_username=to_username or None, service="transfer-service")
-            return {"status": 404, "body": {"detail": "Receiver not found"}}
-        if receiver.id == sender.id:
-            log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="self_transfer", from_user=sender.id, service="transfer-service")
-            return {"status": 400, "body": {"detail": "Cannot transfer to yourself"}}
-        if sender.balance < amount:
-            log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="insufficient_balance", from_user=sender.id, amount_hash=mask_amount(amount), balance=sender.balance, service="transfer-service")
-            return {"status": 400, "body": {"detail": "Insufficient balance"}}
-        sender.balance -= amount
-        receiver.balance += amount
-        transfer = Transfer(from_user=sender.id, to_user=receiver.id, amount=amount)
-        db.add(transfer)
-        db.add(Notification(user_id=sender.id, message=f"Bạn đã chuyển {amount} đến {receiver.username}"))
-        db.add(Notification(user_id=receiver.id, message=f"Bạn nhận {amount} từ {sender.username}"))
-        db.commit()
-        await publish_notify(redis, receiver.id, f"Bạn nhận {amount} từ {sender.username}")
-        log_event(
-            logger,
-            "transfer_success",
-            correlation_id=correlation_id,
-            path=path,
-            action=action,
-            transfer_id=transfer.id,
-            from_user_id=sender.id,
-            from_username=sender.username,
-            from_account_masked=mask_account_number(sender.account_number),
-            to_user_id=receiver.id,
-            to_username=receiver.username,
-            to_account_masked=mask_account_number(receiver.account_number),
-            amount_hash=mask_amount(amount),
-            service="transfer-service",
-            queue="transfer.requests",
-        )
-        return {"status": 200, "body": {"ok": True, "from": sender.username, "to": receiver.username, "to_account_number": receiver.account_number, "amount": amount}}
-    except Exception as e:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    async with SessionLocal() as db:
+        try:
+            sender = (await db.execute(select(User).where(User.id == user_id).with_for_update())).scalar_one_or_none()
+            if not sender:
+                log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="sender_not_found", user_id=user_id, service="transfer-service")
+                return {"status": 404, "body": {"detail": "Sender not found"}}
+            if to_phone:
+                receiver = (await db.execute(select(User).where(User.phone == to_phone).with_for_update())).scalar_one_or_none()
+            elif to_acct:
+                receiver = (await db.execute(select(User).where(User.account_number == to_acct).with_for_update())).scalar_one_or_none()
+            else:
+                receiver = (await db.execute(select(User).where(User.username == to_username).with_for_update())).scalar_one_or_none()
+            if not receiver:
+                log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="receiver_not_found", to_account=to_acct or None, to_username=to_username or None, service="transfer-service")
+                return {"status": 404, "body": {"detail": "Receiver not found"}}
+            if receiver.id == sender.id:
+                log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="self_transfer", from_user=sender.id, service="transfer-service")
+                return {"status": 400, "body": {"detail": "Cannot transfer to yourself"}}
+            if sender.balance < amount:
+                log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="insufficient_balance", from_user=sender.id, amount_hash=mask_amount(amount), balance=sender.balance, service="transfer-service")
+                return {"status": 400, "body": {"detail": "Insufficient balance"}}
+            sender.balance -= amount
+            receiver.balance += amount
+            transfer = Transfer(from_user=sender.id, to_user=receiver.id, amount=amount)
+            db.add(transfer)
+            db.add(Notification(user_id=sender.id, message=f"Bạn đã chuyển {amount} đến {receiver.username}"))
+            db.add(Notification(user_id=receiver.id, message=f"Bạn nhận {amount} từ {sender.username}"))
+            await db.commit()
+            await db.refresh(transfer)
+            await publish_notify(redis, receiver.id, f"Bạn nhận {amount} từ {sender.username}")
+            log_event(
+                logger,
+                "transfer_success",
+                correlation_id=correlation_id,
+                path=path,
+                action=action,
+                transfer_id=transfer.id,
+                from_user_id=sender.id,
+                from_username=sender.username,
+                from_account_masked=mask_account_number(sender.account_number),
+                to_user_id=receiver.id,
+                to_username=receiver.username,
+                to_account_masked=mask_account_number(receiver.account_number),
+                amount_hash=mask_amount(amount),
+                service="transfer-service",
+                queue="transfer.requests",
+            )
+            return {"status": 200, "body": {"ok": True, "from": sender.username, "to": receiver.username, "to_account_number": receiver.account_number, "amount": amount}}
+        except Exception:
+            await db.rollback()
+            raise
 
 
 async def consume():
-    import aio_pika
     connection = await create_connection(logger)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=5)
@@ -166,6 +161,8 @@ async def consume():
 async def lifespan(app: FastAPI):
     global redis
     redis = await create_redis_client(REDIS_URL, logger=logger)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     log_db_pool_status(logger)
     consumer_task = asyncio.create_task(consume())
     yield
@@ -176,6 +173,7 @@ async def lifespan(app: FastAPI):
         pass
     if redis:
         await redis.close()
+    await engine.dispose()
 
 
 app = FastAPI(title="Transfer Service", lifespan=lifespan)
@@ -183,18 +181,19 @@ instrument_fastapi(app, "transfer-service")
 
 
 @app.get("/health")
-async def health():
+async def health(response: Response):
+    db_status = "error"
+    redis_status = "error"
     try:
         if redis:
             await redis.ping()
-        db = SessionLocal()
-        try:
-            db.execute(select(1))
+            redis_status = "ok"
+        async with SessionLocal() as db:
+            await db.execute(select(1))
             db_status = "ok"
-        except Exception:
-            db_status = "error"
-        finally:
-            db.close()
-        return {"status": "healthy", "service": "transfer-service", "database": db_status, "redis": "ok"}
-    except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+    except Exception:
+        pass
+    healthy = db_status == "ok" and redis_status == "ok"
+    if not healthy:
+        response.status_code = 503
+    return {"status": "healthy" if healthy else "unhealthy", "service": "transfer-service", "database": db_status, "redis": redis_status}

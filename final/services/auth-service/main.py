@@ -13,12 +13,11 @@ import json
 import secrets
 from contextlib import asynccontextmanager, nullcontext
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 from sqlalchemy import select
 from redis.asyncio import Redis
 import aio_pika
 from aio_pika import IncomingMessage
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 from common.db import SessionLocal, engine, Base, log_db_pool_status
 from common.models import User
@@ -28,10 +27,7 @@ from common.rabbitmq_utils import reply_rpc, create_connection
 from common.logging_utils import get_json_logger, log_event, log_error_event, should_log_request_flow
 from common.observability import instrument_fastapi, get_tracer
 
-Base.metadata.create_all(bind=engine)
-
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
 logger = get_json_logger("auth-service")
 
@@ -56,31 +52,29 @@ async def handle_register(payload: dict) -> dict:
     password = payload.get("password", "")
     if not phone.isdigit():
         return {"status": 400, "body": {"detail": "Phone must be digits only"}}
-    db = SessionLocal()
-    try:
-        exists = db.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
-        if exists:
-            return {"status": 409, "body": {"detail": "Phone already exists"}}
-        account_number = None
-        for _ in range(20):
-            candidate = _gen_account_number()
-            if not db.execute(select(User).where(User.account_number == candidate)).scalar_one_or_none():
-                account_number = candidate
-                break
-        if not account_number:
-            return {"status": 503, "body": {"detail": "Cannot generate account number"}}
-        pw_hash = await asyncio.to_thread(hash_password, password)
-        u = User(phone=phone, account_number=account_number, username=username, password_hash=pw_hash)
-        db.add(u)
-        db.commit()
-        db.refresh(u)
-        log_event(logger, "register_success", user_id=u.id, username=u.username)
-        return {"status": 200, "body": {"id": u.id, "phone": _mask_phone(u.phone), "username": u.username, "account_number": u.account_number, "balance": u.balance}}
-    except IntegrityError:
-        db.rollback()
-        return {"status": 409, "body": {"detail": "User already exists"}}
-    finally:
-        db.close()
+    async with SessionLocal() as db:
+        try:
+            exists = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
+            if exists:
+                return {"status": 409, "body": {"detail": "Phone already exists"}}
+            account_number = None
+            for _ in range(20):
+                candidate = _gen_account_number()
+                if not (await db.execute(select(User).where(User.account_number == candidate))).scalar_one_or_none():
+                    account_number = candidate
+                    break
+            if not account_number:
+                return {"status": 503, "body": {"detail": "Cannot generate account number"}}
+            pw_hash = await asyncio.to_thread(hash_password, password)
+            u = User(phone=phone, account_number=account_number, username=username, password_hash=pw_hash)
+            db.add(u)
+            await db.commit()
+            await db.refresh(u)
+            log_event(logger, "register_success", user_id=u.id, username=u.username)
+            return {"status": 200, "body": {"id": u.id, "phone": _mask_phone(u.phone), "username": u.username, "account_number": u.account_number, "balance": u.balance}}
+        except IntegrityError:
+            await db.rollback()
+            return {"status": 409, "body": {"detail": "User already exists"}}
 
 
 async def handle_login(payload: dict) -> dict:
@@ -99,19 +93,17 @@ async def handle_login(payload: dict) -> dict:
 
     u = await get_user_for_login(redis, phone, username)
     if u is None:
-        db = SessionLocal()
-        try:
+        async with SessionLocal() as db:
             if phone:
-                row = db.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
+                row = (await db.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
             else:
-                row = db.execute(select(User).where(User.username == username)).scalar_one_or_none()
+                row = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
             if not row:
                 log_event(logger, "login_failed", reason="user_not_found", lookup=lookup_key)
                 return {"status": 401, "body": {"detail": "Invalid credentials"}}
             u = {"id": row.id, "phone": row.phone, "username": row.username, "account_number": row.account_number, "password_hash": row.password_hash, "balance": row.balance, "is_admin": row.is_admin}
             await set_user_for_login_cache(redis, u)
-        finally:
-            db.close()
+
     if not await asyncio.to_thread(verify_password, password, u["password_hash"]):
         log_event(logger, "login_failed", reason="invalid_password", user_id=u["id"], lookup=lookup_key)
         return {"status": 401, "body": {"detail": "Invalid credentials"}}
@@ -122,11 +114,13 @@ async def handle_login(payload: dict) -> dict:
 
 
 async def consume():
-    """Main consumer loop."""
-    connection = await create_connection(logger)
-    channel = await connection.channel()
-    await channel.set_qos(prefetch_count=5)
-    queue = await channel.declare_queue("auth.requests", durable=True)
+    """Main consumer loop. Retries on failure — asyncio.create_task swallows first crash."""
+    while True:
+        try:
+            connection = await create_connection(logger)
+            channel = await connection.channel()
+            await channel.set_qos(prefetch_count=5)
+            queue = await channel.declare_queue("auth.requests", durable=True)
 
     async def process_message(message: IncomingMessage):
         async with message.process():
@@ -158,12 +152,19 @@ async def consume():
     log_event(logger, "rabbitmq_connected")
     log_event(logger, "auth_consumer_started", queue="auth.requests")
     await asyncio.Future()  # Run forever
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log_error_event(logger, "consumer_crashed", exc=exc, service="auth-service")
+            await asyncio.sleep(5)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis
     redis = await create_redis_client(REDIS_URL, logger=logger)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     log_db_pool_status(logger)
     consumer_task = asyncio.create_task(consume())
     yield
@@ -174,6 +175,7 @@ async def lifespan(app: FastAPI):
         pass
     if redis:
         await redis.close()
+    await engine.dispose()
 
 
 app = FastAPI(title="Auth Service", lifespan=lifespan)
@@ -181,18 +183,19 @@ instrument_fastapi(app, "auth-service")
 
 
 @app.get("/health")
-async def health():
+async def health(response: Response):
+    db_status = "error"
+    redis_status = "error"
     try:
         if redis:
             await redis.ping()
-        db = SessionLocal()
-        try:
-            db.execute(select(1))
+            redis_status = "ok"
+        async with SessionLocal() as db:
+            await db.execute(select(1))
             db_status = "ok"
-        except Exception:
-            db_status = "error"
-        finally:
-            db.close()
-        return {"status": "healthy", "service": "auth-service", "database": db_status, "redis": "ok"}
-    except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+    except Exception:
+        pass
+    healthy = db_status == "ok" and redis_status == "ok"
+    if not healthy:
+        response.status_code = 503
+    return {"status": "healthy" if healthy else "unhealthy", "service": "auth-service", "database": db_status, "redis": redis_status}

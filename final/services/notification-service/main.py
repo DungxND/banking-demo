@@ -11,9 +11,8 @@ import os
 import asyncio
 import json
 from contextlib import asynccontextmanager, nullcontext
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 from sqlalchemy import select
 from redis.asyncio import Redis
 
@@ -24,33 +23,45 @@ from common.rabbitmq_utils import reply_rpc, create_connection
 from common.logging_utils import get_json_logger, log_event, log_error_event, should_log_request_flow
 from common.observability import instrument_fastapi, get_tracer
 
-Base.metadata.create_all(bind=engine)
-
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 logger = get_json_logger("notification-service")
 redis: Redis | None = None
 
 
-async def handle_notifications(payload: dict, headers: dict) -> dict:
-    """GET /notifications — list user notifications."""
-    from fastapi import HTTPException
+async def _fetch_notifications(user_id: int) -> list:
+    """Query DB for the 50 most recent notifications for a user."""
+    async with SessionLocal() as db:
+        items = (await db.execute(
+            select(Notification)
+            .where(Notification.user_id == user_id)
+            .order_by(Notification.created_at.desc())
+            .limit(50)
+        )).scalars().all()
+        return [{"id": x.id, "message": x.message, "is_read": x.is_read, "created_at": x.created_at.isoformat() + "Z"} for x in items]
+
+
+async def _resolve_user_id(x_session: str | None) -> int:
+    """Resolve session to user_id, raising HTTPException(401) on failure."""
     try:
-        user_id = await get_user_id_from_session(redis, headers.get("x-session") or headers.get("X-Session"))
+        return await get_user_id_from_session(redis, x_session)
+    except HTTPException:
+        raise
     except Exception:
-        return {"status": 401, "body": {"detail": "Invalid/expired session"}}
-    db = SessionLocal()
+        raise HTTPException(status_code=401, detail="Invalid/expired session")
+
+
+async def handle_notifications(payload: dict, headers: dict) -> dict:
+    """RabbitMQ handler — GET /notifications."""
     try:
-        items = db.execute(select(Notification).where(Notification.user_id == user_id).order_by(Notification.created_at.desc()).limit(50)).scalars().all()
-        return {"status": 200, "body": [{"id": x.id, "message": x.message, "is_read": x.is_read, "created_at": x.created_at.isoformat() + "Z"} for x in items]}
-    finally:
-        db.close()
+        user_id = await _resolve_user_id(headers.get("x-session") or headers.get("X-Session"))
+    except HTTPException as e:
+        return {"status": e.status_code, "body": {"detail": e.detail}}
+    return {"status": 200, "body": await _fetch_notifications(user_id)}
 
 
 async def consume():
-    import aio_pika
     connection = await create_connection(logger)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=5)
@@ -90,6 +101,8 @@ async def consume():
 async def lifespan(app: FastAPI):
     global redis
     redis = await create_redis_client(REDIS_URL, logger=logger)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     log_db_pool_status(logger)
     consumer_task = asyncio.create_task(consume())
     yield
@@ -100,6 +113,8 @@ async def lifespan(app: FastAPI):
         pass
     if redis:
         await redis.close()
+    await engine.dispose()
+
 
 app = FastAPI(title="Notification Service", lifespan=lifespan)
 instrument_fastapi(app, "notification-service")
@@ -109,7 +124,6 @@ app.add_middleware(CORSMiddleware, allow_origins=[x.strip() for x in CORS_ORIGIN
 @app.websocket("/ws")
 async def ws(websocket: WebSocket):
     """WebSocket — real-time notifications (bypasses queue)."""
-    from fastapi import HTTPException
     session = websocket.query_params.get("session")
     if not session:
         await websocket.close(code=1008)
@@ -160,47 +174,27 @@ async def ws(websocket: WebSocket):
 
 
 @app.get("/health")
-async def health():
+async def health(response: Response):
+    db_status = "error"
+    redis_status = "error"
     try:
         if redis:
             await redis.ping()
-        db = SessionLocal()
-        try:
-            db.execute(select(1))
+            redis_status = "ok"
+        async with SessionLocal() as db:
+            await db.execute(select(1))
             db_status = "ok"
-        except Exception:
-            db_status = "error"
-        finally:
-            db.close()
-        return {"status": "healthy", "service": "notification-service", "database": db_status, "redis": "ok"}
-    except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
-
-
-async def _get_notifications(x_session: str | None) -> list:
-    """Lấy danh sách notifications theo session."""
-    from fastapi import HTTPException
-    try:
-        user_id = await get_user_id_from_session(redis, x_session)
     except Exception:
-        raise HTTPException(status_code=401, detail="Invalid/expired session")
-    db = SessionLocal()
-    try:
-        items = db.execute(
-            select(Notification)
-            .where(Notification.user_id == user_id)
-            .order_by(Notification.created_at.desc())
-            .limit(50)
-        ).scalars().all()
-        return [{"id": x.id, "message": x.message, "is_read": x.is_read, "created_at": x.created_at.isoformat() + "Z"} for x in items]
-    finally:
-        db.close()
+        pass
+    healthy = db_status == "ok" and redis_status == "ok"
+    if not healthy:
+        response.status_code = 503
+    return {"status": "healthy" if healthy else "unhealthy", "service": "notification-service", "database": db_status, "redis": redis_status}
 
 
 @app.get("/notifications")
 @app.get("/api/notifications/notifications")
 async def get_notifications(x_session: str | None = Header(None, alias="X-Session")):
     """GET notifications — hỗ trợ cả Kong route trực tiếp và qua api-producer."""
-    return await _get_notifications(x_session)
-
-
+    user_id = await _resolve_user_id(x_session)
+    return await _fetch_notifications(user_id)

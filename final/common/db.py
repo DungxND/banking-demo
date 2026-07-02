@@ -1,7 +1,7 @@
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from typing import TYPE_CHECKING
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase
+from typing import TYPE_CHECKING, AsyncGenerator
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -14,7 +14,11 @@ MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "5"))
 if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
-engine = create_engine(
+# Replace sync driver with async driver for psycopg
+if DATABASE_URL and DATABASE_URL.startswith("postgresql+psycopg://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+
+engine = create_async_engine(
     DATABASE_URL,
     future=True,
     pool_pre_ping=True,
@@ -23,7 +27,13 @@ engine = create_engine(
     pool_timeout=30,
     pool_recycle=600,
 )
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+SessionLocal = async_sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """FastAPI dependency — yields an AsyncSession and closes it after the request."""
+    async with SessionLocal() as session:
+        yield session
 
 
 def log_db_pool_status(logger: "Logger | None" = None) -> None:

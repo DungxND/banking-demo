@@ -46,7 +46,10 @@ def init_tracing(service_name: str) -> None:
             from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
             from common import db
             if getattr(db, "engine", None):
-                SQLAlchemyInstrumentor().instrument(engine=db.engine)
+                # engine.sync_engine exposes the underlying sync Engine that
+                # SQLAlchemyInstrumentor expects (async engines are not directly supported).
+                sync_engine = getattr(db.engine, "sync_engine", db.engine)
+                SQLAlchemyInstrumentor().instrument(engine=sync_engine)
         except Exception:
             pass
 
