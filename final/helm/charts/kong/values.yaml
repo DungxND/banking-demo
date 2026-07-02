@@ -7,8 +7,8 @@ kong:
   imagePullSecrets: []
   replicas: 1
   service:
-    type: ClusterIP       # set to NodePort + proxyNodePort: 80 on k3s (no ingress controller)
-    proxyNodePort: ""     # e.g. 80 — only used when type=NodePort
+    hostPort: 80          # binds Kong proxy directly to host port 80 on k3s (no ingress controller needed)
+                          # set to "" to disable hostPort (e.g. when using a real ingress controller)
   proxyPort: 8000
   adminPort: 8001
   proxyPortName: proxy

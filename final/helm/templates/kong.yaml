@@ -113,6 +113,9 @@ spec:
           ports:
             - containerPort: {{ .Values.kong.proxyPort }}
               name: {{ .Values.kong.proxyPortName }}
+              {{- if .Values.kong.service.hostPort }}
+              hostPort: {{ .Values.kong.service.hostPort }}
+              {{- end }}
             - containerPort: {{ .Values.kong.adminPort }}
               name: {{ .Values.kong.adminPortName }}
           volumeMounts:
@@ -143,16 +146,13 @@ metadata:
     app: {{ include "banking-demo.kong.fullname" . }}
     {{- include "banking-demo.kong.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.kong.service.type | default "ClusterIP" }}
+  type: ClusterIP
   selector:
     {{- include "banking-demo.kong.selectorLabels" . | nindent 4 }}
   ports:
     - port: {{ .Values.kong.proxyPort }}
       targetPort: {{ .Values.kong.proxyPort }}
       name: {{ .Values.kong.proxyPortName }}
-      {{- if and (eq (.Values.kong.service.type | default "ClusterIP") "NodePort") .Values.kong.service.proxyNodePort }}
-      nodePort: {{ .Values.kong.service.proxyNodePort }}
-      {{- end }}
     - port: {{ .Values.kong.adminPort }}
       targetPort: {{ .Values.kong.adminPort }}
       name: {{ .Values.kong.adminPortName }}

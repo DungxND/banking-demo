@@ -95,12 +95,10 @@ for svc in api-producer auth-service account-service transfer-service notificati
   SETS="$SETS --set ${svc}.image.pullPolicy=IfNotPresent"
 done
 
-# Traefik is disabled — expose Kong directly as NodePort so the EC2 security
-# group port 80 reaches the Kong proxy without any IngressController.
-# Frontend is served through Kong's / route at port 80.
-# Kong admin stays ClusterIP (internal only).
-SETS="$SETS --set kong.service.type=NodePort"
-SETS="$SETS --set kong.service.proxyNodePort=80"
+# Traefik is disabled — bind Kong proxy to host port 80 via hostPort so the EC2
+# security group port 80 reaches Kong directly without any IngressController.
+# hostPort bypasses kube-proxy entirely: the node kernel forwards :80 → Kong pod.
+SETS="$SETS --set kong.service.hostPort=80"
 
 # Use KUBECONFIG explicitly since this runs as root but the file is at the k3s path
 KUBECONFIG=/etc/rancher/k3s/k3s.yaml \
