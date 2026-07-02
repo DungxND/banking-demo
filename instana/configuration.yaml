@@ -50,16 +50,16 @@ com.instana.plugin.traefik:
 # ---------------------------------------------------------------------------
 # OpenTelemetry — accept OTLP from pods (gRPC :4317, HTTP :4318).
 # Services instrument via opentelemetry-sdk and export to status.hostIP.
-# Without explicit listenAddress the agent defaults to localhost only.
+# The agent binds to 0.0.0.0 by default when grpc/http are enabled.
+# Use 'port' to configure the port number (not 'listenAddress' — invalid key).
 # ---------------------------------------------------------------------------
 com.instana.plugin.opentelemetry:
-  enabled: true
   grpc:
     enabled: true
-    listenAddress: "0.0.0.0:4317"
+    port: 4317
   http:
     enabled: true
-    listenAddress: "0.0.0.0:4318"
+    port: 4318
 
 # ---------------------------------------------------------------------------
 # Python — enable agent-side Python process detection.
