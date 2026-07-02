@@ -23,7 +23,7 @@ secret:
   rabbitmqUrl: "amqp://banking:bankingpass@rabbitmq:5672/"
 
 dbMigration:
-  enabled: false
+  enabled: true
   image: "postgres:18-alpine"
   hookWeight: "-10"
   backoffLimit: 2
