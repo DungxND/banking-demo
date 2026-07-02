@@ -19,19 +19,33 @@ spec:
         app: {{ include "banking-demo.api-producer.fullname" . }}
         {{- include "banking-demo.api-producer.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with $svc.securityContext.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $svc.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml $svc.imagePullSecrets | nindent 8 }}
+      {{- end }}
       containers:
         - name: api-producer
           image: "{{ $svc.image.repository }}:{{ $svc.image.tag }}"
           imagePullPolicy: {{ $svc.image.pullPolicy }}
+          {{- with $svc.securityContext.container }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - containerPort: {{ $svc.service.port }}
               name: {{ $svc.service.portName }}
           env:
+            {{- if $svc.secretRef.keys.redisUrl }}
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ $svc.secretRef.name }}
                   key: {{ $svc.secretRef.keys.redisUrl }}
+            {{- end }}
             {{- if $svc.rabbitmqSecretRef }}
             - name: RABBITMQ_URL
               valueFrom:

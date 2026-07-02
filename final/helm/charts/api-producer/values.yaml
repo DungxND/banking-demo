@@ -4,6 +4,7 @@ api-producer:
   enabled: true
   image:
     pullPolicy: Always
+  imagePullSecrets: []
   replicas: 1
   service:
     port: 8080
@@ -29,3 +30,11 @@ api-producer:
     limits:
       memory: "512Mi"
       cpu: "500m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+    container:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]

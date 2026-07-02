@@ -6,6 +6,7 @@ Namespace: {{ .Release.Namespace }}
 
 Deploy command (from final/helm/):
   helm upgrade --install banking-demo . -n banking --create-namespace \
+    --rollback-on-failure \
     -f charts/common/values.yaml \
     -f charts/postgres/values.yaml \
     -f charts/redis/values.yaml \
@@ -17,5 +18,10 @@ Deploy command (from final/helm/):
     -f charts/notification-service/values.yaml \
     -f charts/api-producer/values.yaml \
     -f charts/frontend/values.yaml
+
+HELM 4 NOTES:
+  - --atomic renamed to --rollback-on-failure; --force renamed to --force-replace.
+  - Fresh installs default to Server-Side Apply (SSA). Add --server-side=false to keep
+    client-side apply (e.g. when upgrading a release originally installed with Helm 3).
 
 Ingress host: {{ .Values.ingress.host | default "localhost" }}

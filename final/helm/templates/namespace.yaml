@@ -5,6 +5,5 @@ metadata:
   name: {{ .Values.global.namespace }}
   labels:
     {{- include "banking-demo.labels" . | nindent 4 }}
-    app.kubernetes.io/name: banking-demo
     phase: "8"
 {{- end }}
