@@ -4,9 +4,8 @@
 # What this does:
 #   1. Install k3s (Kubernetes + containerd, runs as a systemd service on the host)
 #   2. Install helm
-#   3. Clone the repo into ~/banking-demo (owned by the login user)
-#   4. Build images with Docker (k3s has its own containerd but Docker is easiest
-#      for building; images are imported into k3s via ctr)
+#   3. Clone the repo (instana branch) into ~/banking-demo (owned by the login user)
+#   4. Pull pre-built images from ghcr.io/dungxnd/banking-demo (CI-built)
 #   5. Deploy via Helm
 #   6. Install Instana host agent
 #   7. Print access URLs
@@ -44,30 +43,19 @@ esac
 LOGIN_HOME=$(getent passwd "$LOGIN_USER" | cut -d: -f6)
 REPO_DIR="$LOGIN_HOME/banking-demo"
 
-# ── 1. Install base packages + Docker (for building images) ──────────────────
+# ── 1. Install base packages ──────────────────────────────────────────────────
 if [ "$DISTRO" = "amzn" ]; then
   dnf update -y
-  dnf install -y docker git curl tar
-  systemctl enable --now docker
+  dnf install -y git curl tar
 elif [ "$DISTRO" = "ubuntu" ]; then
   apt-get update -y
-  apt-get install -y ca-certificates curl gnupg git tar
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  echo \
-    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-    > /etc/apt/sources.list.d/docker.list
-  apt-get update -y
-  apt-get install -y docker-ce docker-ce-cli containerd.io
-  systemctl enable --now docker
+  apt-get install -y ca-certificates curl git tar
 fi
 
-usermod -aG docker "$LOGIN_USER"
-
 # ── 2. Install k3s ────────────────────────────────────────────────────────────
-# --disable traefik: we use Kong as the gateway; traefik would conflict on :80/:443
+# --disable traefik: Kong is the gateway; it is exposed directly as NodePort on
+#   :80 (proxy) so no IngressController is needed — an Ingress resource pointing
+#   at a disabled Traefik would simply never be processed.
 # --write-kubeconfig-mode 644: Instana host agent must read this file; k3s
 #   recreates it as 600 on each restart — setting mode here makes it persistent
 curl -sfL https://get.k3s.io | \
@@ -87,38 +75,32 @@ curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
 # ── 4. Clone repo ─────────────────────────────────────────────────────────────
 sudo -u "$LOGIN_USER" git clone --branch instana "$REPO_URL" "$REPO_DIR"
 
-# ── 5. Build images with Docker + import into k3s containerd ─────────────────
-# k3s uses its own containerd instance (/run/k3s/containerd/containerd.sock).
-# The easiest bridge: build with Docker, save as tar, import via k3s ctr.
-# All images are tagged as localhost/<name>:latest — k3s resolves "localhost"
-# registry pulls from its own containerd store without needing a registry server.
-cd "$REPO_DIR/final"
-
-build_import() {
-  local name=$1 dockerfile=$2 context=$3
-  docker build -f "$dockerfile" "$context" -t "localhost/$name:latest"
-  docker save "localhost/$name:latest" \
-    | k3s ctr images import -
-}
-
-build_import api-producer         producer/Dockerfile                  .
-build_import auth-service         services/auth-service/Dockerfile     .
-build_import account-service      services/account-service/Dockerfile  .
-build_import transfer-service     services/transfer-service/Dockerfile .
-build_import notification-service services/notification-service/Dockerfile .
-build_import frontend             frontend/Dockerfile                  frontend
+# ── 5. Pull pre-built images from GHCR into k3s containerd ───────────────────
+# Images are built by CI and published to ghcr.io/dungxnd/banking-demo/<name>.
+# k3s containerd pulls them directly — no Docker needed.
+GHCR="ghcr.io/dungxnd/banking-demo"
+for svc in api-producer auth-service account-service transfer-service notification-service frontend; do
+  k3s ctr images pull "${GHCR}/${svc}:latest"
+done
 
 # ── 6. Deploy with Helm ───────────────────────────────────────────────────────
 cd "$REPO_DIR/final/helm"
 
-# Override image repos to use the k3s local store; pullPolicy=Never so k3s
-# never tries to pull from Docker Hub (the images are already imported above).
+# Images are already in k3s containerd; use IfNotPresent so k3s won't re-pull
+# on pod restarts (images are local, no registry auth needed at runtime).
 SETS=""
 for svc in api-producer auth-service account-service transfer-service notification-service frontend; do
-  SETS="$SETS --set ${svc}.image.repository=localhost/${svc}"
+  SETS="$SETS --set ${svc}.image.repository=${GHCR}/${svc}"
   SETS="$SETS --set ${svc}.image.tag=latest"
-  SETS="$SETS --set ${svc}.image.pullPolicy=Never"
+  SETS="$SETS --set ${svc}.image.pullPolicy=IfNotPresent"
 done
+
+# Traefik is disabled — expose Kong directly as NodePort so the EC2 security
+# group port 80 reaches the Kong proxy without any IngressController.
+# Frontend is served through Kong's / route at port 80.
+# Kong admin stays ClusterIP (internal only).
+SETS="$SETS --set kong.service.type=NodePort"
+SETS="$SETS --set kong.service.proxyNodePort=80"
 
 # Use KUBECONFIG explicitly since this runs as root but the file is at the k3s path
 KUBECONFIG=/etc/rancher/k3s/k3s.yaml \
@@ -194,18 +176,16 @@ fi
 
 echo ""
 echo "=== Banking Demo deployed on k3s ==="
-echo "  Frontend  : http://${PUBLIC_IP}:80  (via k3s ingress)"
-echo "  Kong API  : http://${PUBLIC_IP}:8000"
+echo "  Frontend  : http://${PUBLIC_IP}/          (Kong NodePort :80)"
+echo "  Kong API  : http://${PUBLIC_IP}/api/       (Kong NodePort :80)"
+echo "  WebSocket : ws://${PUBLIC_IP}/ws           (Kong NodePort :80)"
 echo ""
 echo "SSH in then:"
 echo "  kubectl get pods -n banking"
 echo "  kubectl logs -n banking -l app=api-producer -f"
 echo ""
-echo "Rebuild a single service after code change:"
-echo "  cd ~/banking-demo/final"
-echo "  git pull"
-echo "  docker build -f producer/Dockerfile . -t localhost/api-producer:latest"
-echo "  docker save localhost/api-producer:latest | sudo k3s ctr images import -"
+echo "Update a single service to a new image:"
+echo "  sudo k3s ctr images pull ghcr.io/dungxnd/banking-demo/api-producer:latest"
 echo "  kubectl rollout restart deployment/api-producer -n banking"
 echo ""
 echo "Instana agent (install manually with your key):"
