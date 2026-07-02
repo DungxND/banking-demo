@@ -11,6 +11,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     balance: Mapped[int] = mapped_column(Integer, default=100000)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class Transfer(Base):
     __tablename__ = "transfers"

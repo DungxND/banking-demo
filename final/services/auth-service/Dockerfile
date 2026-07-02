@@ -7,7 +7,8 @@ WORKDIR /app
 COPY common /app/common
 COPY services/auth-service /app
 
-RUN pip install --no-cache-dir -r common/requirements.txt
+RUN pip install --no-cache-dir -r common/requirements.txt \
+ && chmod +x entrypoint.sh
 
 EXPOSE 8001
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--proxy-headers", "--forwarded-allow-ips=*"]
+CMD ["./entrypoint.sh"]

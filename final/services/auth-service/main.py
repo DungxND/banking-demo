@@ -104,7 +104,7 @@ async def handle_login(payload: dict) -> dict:
             if not row:
                 log_event(logger, "login_failed", reason="user_not_found", lookup=lookup_key)
                 return {"status": 401, "body": {"detail": "Invalid credentials"}}
-            u = {"id": row.id, "phone": row.phone, "username": row.username, "account_number": row.account_number, "password_hash": row.password_hash, "balance": row.balance}
+            u = {"id": row.id, "phone": row.phone, "username": row.username, "account_number": row.account_number, "password_hash": row.password_hash, "balance": row.balance, "is_admin": row.is_admin}
             await set_user_for_login_cache(redis, u)
         finally:
             db.close()
@@ -114,7 +114,7 @@ async def handle_login(payload: dict) -> dict:
 
     sid = await create_session(redis, u["id"])
     log_event(logger, "login_success", user_id=u["id"], username=u["username"])
-    return {"status": 200, "body": {"session": sid, "phone": _mask_phone(u["phone"]), "username": u["username"], "account_number": u["account_number"], "balance": u["balance"]}}
+    return {"status": 200, "body": {"session": sid, "phone": _mask_phone(u["phone"]), "username": u["username"], "account_number": u["account_number"], "balance": u["balance"], "is_admin": u.get("is_admin", False)}}
 
 
 async def consume():

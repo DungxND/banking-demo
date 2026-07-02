@@ -72,6 +72,7 @@ async def set_user_for_login_cache(redis: Redis, user: dict[str, Any], ttl: int 
         "account_number": user["account_number"],
         "password_hash": user["password_hash"],
         "balance": user["balance"],
+        "is_admin": user.get("is_admin", False),
     }
     val = json.dumps(data)
     await redis.setex(f"user_cache:phone:{user['phone']}", ttl, val)
