@@ -34,8 +34,14 @@ data:
         plugins:
           - name: cors
             config:
+              {{- $origins := $.Values.kong.corsOrigins }}
+              {{- /* Allow global.corsOrigins to override the chart default */}}
+              {{- if $.Values.global }}
+              {{- if $.Values.global.corsOrigins }}
+              {{- $origins = $.Values.global.corsOrigins }}
+              {{- end }}
+              {{- end }}
               origins:
-                {{- $origins := $.Values.kong.corsOrigins }}
                 {{- if kindIs "string" $origins }}
                 - {{ $origins | quote }}
                 {{- else }}
@@ -132,11 +138,23 @@ spec:
             periodSeconds: {{ .Values.kong.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.kong.readinessProbe.timeoutSeconds }}
           {{- end }}
+          {{- if .Values.kong.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command: {{ toJson .Values.kong.livenessProbe.command }}
+            initialDelaySeconds: {{ .Values.kong.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.kong.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.kong.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.kong.livenessProbe.failureThreshold }}
+          {{- end }}
       volumes:
         - name: kong-config
           configMap:
             name: {{ include "banking-demo.kong.configMapName" . }}
 ---
+# Kong ClusterIP Service — used for intra-cluster communication only
+# (e.g. if an Ingress controller is placed in front of Kong).
+# External access on port 80 is handled by hostPort on the pod above.
 apiVersion: v1
 kind: Service
 metadata:
@@ -146,14 +164,14 @@ metadata:
     app: {{ include "banking-demo.kong.fullname" . }}
     {{- include "banking-demo.kong.labels" . | nindent 4 }}
 spec:
-  type: ClusterIP
+  type: {{ .Values.kong.service.type }}
   selector:
     {{- include "banking-demo.kong.selectorLabels" . | nindent 4 }}
   ports:
-    - port: {{ .Values.kong.proxyPort }}
+    - name: {{ .Values.kong.proxyPortName }}
+      port: {{ .Values.kong.proxyPort }}
       targetPort: {{ .Values.kong.proxyPort }}
-      name: {{ .Values.kong.proxyPortName }}
-    - port: {{ .Values.kong.adminPort }}
+    - name: {{ .Values.kong.adminPortName }}
+      port: {{ .Values.kong.adminPort }}
       targetPort: {{ .Values.kong.adminPort }}
-      name: {{ .Values.kong.adminPortName }}
 {{- end }}

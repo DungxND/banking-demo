@@ -6,9 +6,21 @@ kong:
     pullPolicy: IfNotPresent
   imagePullSecrets: []
   replicas: 1
+
+  # ── Service exposure ────────────────────────────────────────
+  # k3s / bare-metal EC2 — no cloud LoadBalancer available.
+  # Strategy: ClusterIP Service for intra-cluster traffic + hostPort
+  # on the pod to bind port 80 directly on the node NIC.
+  # This is identical to how k3s exposes its own Traefik ingress.
+  #
+  # NodePort cannot be used for port 80 — Kubernetes enforces the
+  # range 30000-32767. A cloud LoadBalancer is the right solution
+  # when you move to EKS/GKE; simply change service.type to
+  # LoadBalancer and remove service.hostPort at that point.
   service:
-    hostPort: 80          # binds Kong proxy directly to host port 80 on k3s (no ingress controller needed)
-                          # set to "" to disable hostPort (e.g. when using a real ingress controller)
+    type: ClusterIP
+    hostPort: 80           # bound on the node NIC by the container runtime
+
   proxyPort: 8000
   adminPort: 8001
   proxyPortName: proxy
@@ -16,6 +28,7 @@ kong:
   configMountPath: /kong
   configFileName: kong.yml
   configMapName: kong-config
+
   env:
     KONG_DATABASE: "off"
     KONG_DECLARATIVE_CONFIG: "/kong/kong.yml"
@@ -23,10 +36,22 @@ kong:
     KONG_ADMIN_ACCESS_LOG: "/dev/stdout"
     KONG_PROXY_ERROR_LOG: "/dev/stderr"
     KONG_ADMIN_ERROR_LOG: "/dev/stderr"
-    KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+    # Admin bound to loopback only — never expose the admin API externally.
+    KONG_ADMIN_LISTEN: "127.0.0.1:8001"
     KONG_PROXY_LISTEN: "0.0.0.0:8000"
     KONG_NGINX_WORKER_PROCESSES: "1"
-  # Phase 8: /api/* → api-producer, /ws → notification-service direct
+    # Trust X-Forwarded-* headers from any upstream load balancer / cloud NLB.
+    KONG_TRUSTED_IPS: "0.0.0.0/0,::/0"
+    KONG_REAL_IP_HEADER: "X-Forwarded-For"
+
+  # ── Backend routing table ────────────────────────────────────
+  # Kong is the ONLY entry point. All traffic — UI and API — flows
+  # through it. Route priority = longest prefix wins.
+  #
+  #   /api  → api-producer   (REST / RPC gateway)
+  #   /ws   → notification-service  (WebSocket)
+  #   /     → frontend       (React SPA — catch-all, must be last)
+  #
   backends:
     - name: api-producer
       url: "http://api-producer:8080"
@@ -34,35 +59,78 @@ kong:
         - name: api-route
           paths: ["/api"]
           strip_path: false
+
     - name: notification-service
       url: "http://notification-service:8004"
       routes:
         - name: notification-ws-route
           paths: ["/ws"]
           strip_path: false
-          protocols: ["http", "https"]
-  # No domain needed — use wildcard "*" for EC2 with unfixed IP.
-  # Restrict to a specific origin once you have a domain or stable IP.
+          protocols: ["http", "https", "ws", "wss"]
+
+    # Frontend last — broadest match, lowest specificity.
+    - name: frontend
+      url: "http://frontend:80"
+      routes:
+        - name: frontend-route
+          paths: ["/"]
+          strip_path: false
+
+  # ── CORS ─────────────────────────────────────────────────────
+  # Populated at render time from .Values.global.corsOrigins.
+  # Override per-environment in your environment values file, e.g.:
+  #   global.corsOrigins: "https://app.example.com"
+  # Set corsCredentials: true only when corsOrigins is NOT "*".
   corsOrigins: "*"
-  corsCredentials: false  # Must be false when origins is "*"
-  corsMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  corsCredentials: false   # Must be false when origins is "*"
+  corsMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
   corsHeaders:
     - Accept
     - Accept-Version
+    - Authorization
     - Content-Length
     - Content-MD5
     - Content-Type
     - Date
     - X-Session
+
+  # ── Global plugins ───────────────────────────────────────────
   globalPlugins:
     - name: prometheus
-  extraPlugins: []
+
+  # ── Per-service extra plugins ────────────────────────────────
+  # Applied to every service in the backends list above.
+  # Rate-limit: protects all API endpoints from abuse.
+  # Request-size: prevents oversized payloads from reaching services.
+  extraPlugins:
+    - name: rate-limiting
+      config:
+        minute: 120          # 120 req/min per consumer (adjust per SLA)
+        policy: local        # use "redis" policy once Redis is shared
+        error_code: 429
+        error_message: "Rate limit exceeded"
+    - name: request-size-limiting
+      config:
+        allowed_payload_size: 4   # MB
+        size_unit: megabytes
+
+  # ── Probes ───────────────────────────────────────────────────
   readinessProbe:
     enabled: true
     command: ["kong", "health"]
     initialDelaySeconds: 15
     periodSeconds: 10
     timeoutSeconds: 10
+
+  livenessProbe:
+    enabled: true
+    command: ["kong", "health"]
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+  # ── Resources ────────────────────────────────────────────────
   resources:
     requests:
       memory: "512Mi"
@@ -70,6 +138,8 @@ kong:
     limits:
       memory: "1Gi"
       cpu: "1000m"
+
+  # ── Security ─────────────────────────────────────────────────
   securityContext:
     pod:
       seccompProfile:

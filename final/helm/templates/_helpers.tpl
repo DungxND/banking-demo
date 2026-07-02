@@ -24,7 +24,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "banking-demo.corsOrigins" -}}
-{{- default "http://localhost:3000" .Values.global.corsOrigins -}}
+{{- default "*" .Values.global.corsOrigins -}}
 {{- end -}}
 
 {{/* --- Postgres --- */}}

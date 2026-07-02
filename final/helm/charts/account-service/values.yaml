@@ -16,7 +16,7 @@ account-service:
   rabbitmqSecretRef:
     name: rabbitmq-connection-secret
     key: RABBITMQ_URL
-  corsOrigins: "http://localhost:3000"
+  corsOrigins: ""   # fallback to global.corsOrigins — do not set here
   extraEnv: {}
   readinessProbe:
     enabled: true

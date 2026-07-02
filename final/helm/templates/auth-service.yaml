@@ -59,7 +59,7 @@ spec:
                   key: {{ $svc.rabbitmqSecretRef.key }}
             {{- end }}
             - name: CORS_ORIGINS
-              value: {{ $svc.corsOrigins | quote }}
+              value: {{ include "banking-demo.corsOrigins" . | quote }}
             {{- range $k, $v := $svc.extraEnv }}
             - name: {{ $k }}
               value: {{ $v | quote }}

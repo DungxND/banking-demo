@@ -1,8 +1,12 @@
-# Cấu hình dùng chung — global, namespace, secret, ingress
+# Shared configuration — global, namespace, secret, ingress
 global:
   namespace: banking
   secretName: banking-db-secret
-  corsOrigins: "http://localhost:3000"
+  # Single source of truth for CORS. Kong reads this via .Values.global.corsOrigins.
+  # Each backend service also receives it as CORS_ORIGINS env var.
+  # For EC2 without a domain, "*" allows any origin.
+  # Once you have a domain, restrict this: "https://app.example.com"
+  corsOrigins: "*"
 
 namespace:
   enabled: true
@@ -55,22 +59,18 @@ smokeTest:
       cpu: 200m
       memory: 128Mi
 
+# ── Ingress ──────────────────────────────────────────────────
+# Kong is now the single edge gateway (NodePort 80).
+# The Ingress resource is disabled by default.
+# Re-enable only if you switch kong.service.type to ClusterIP
+# and want an external Ingress controller in front of Kong.
 ingress:
-  enabled: true
-  className: traefik  # k3d default. Change to nginx or haproxy for other clusters.
-  host: ""            # Leave empty to match any IP (EC2 without domain).
-                      # Set to a domain name if you have one: e.g. "my-ec2.example.com"
+  enabled: false
+  className: traefik
+  host: ""
   name: banking-ingress
   paths:
     - path: /
-      pathType: Prefix
-      serviceName: frontend
-      servicePort: 80
-    - path: /api
-      pathType: Prefix
-      serviceName: kong
-      servicePort: 8000
-    - path: /ws
       pathType: Prefix
       serviceName: kong
       servicePort: 8000
