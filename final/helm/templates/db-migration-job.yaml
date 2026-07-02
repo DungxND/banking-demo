@@ -76,7 +76,7 @@ spec:
             - name: POSTGRES_HOST
               value: {{ include "banking-demo.postgres.fullname" . | quote }}
             - name: POSTGRES_PORT
-              value: {{ .Values.postgres.service.port | quote }}
+              value: {{ (.Values.postgres).service | default dict | dig "port" "5432" | quote }}
             - name: POSTGRES_DB
               value: {{ .Values.secret.postgresDb | quote }}
             - name: POSTGRES_USER
