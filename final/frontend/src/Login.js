@@ -1,25 +1,28 @@
-import React, { useState } from "react";
+import { useState, useTransition } from "react";
 import { api, setSession } from "./api";
 
 export default function Login({ onOk, onGoRegister, onGoAdmin }) {
   const [phone, setPhone] = useState("");
   const [password, setP] = useState("");
   const [err, setErr] = useState("");
+  const [isPending, startTransition] = useTransition();
 
-  const submit = async () => {
+  const submit = () => {
     setErr("");
-    try {
-      const r = await api.login(phone, password);
-      setSession(r.session);
-      onOk();
-    } catch (e) {
-      setErr(e.message || "Login failed");
-    }
+    startTransition(async () => {
+      try {
+        const r = await api.login(phone, password);
+        setSession(r.session);
+        onOk();
+      } catch (e) {
+        setErr(e.message || "Login failed");
+      }
+    });
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-7 shadow-sm">
+      <div className="w-full max-w-md rounded-2xl border bg-white p-7 shadow-xs">
         <div className="flex items-center gap-3 mb-5">
           <div className="h-10 w-10 rounded-xl bg-blue-600 text-white grid place-items-center font-bold">B</div>
           <div>
@@ -53,13 +56,15 @@ export default function Login({ onOk, onGoRegister, onGoAdmin }) {
         <div className="mt-5 flex gap-3">
           <button
             onClick={submit}
-            className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+            disabled={isPending}
+            className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            Sign in
+            {isPending ? "Signing in..." : "Sign in"}
           </button>
           <button
             onClick={onGoRegister}
-            className="flex-1 rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            disabled={isPending}
+            className="flex-1 rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
             Create
           </button>

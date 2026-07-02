@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Layout from "./ui/Layout";
 import Card from "./ui/Card";
 import { api, getSession, clearSession } from "./api";
@@ -12,6 +12,7 @@ export default function Dashboard({ onLogout, onGoAdmin }) {
   const [wsStatus, setWsStatus] = useState("disconnected");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [isPending, startTransition] = useTransition();
 
   const session = getSession();
 
@@ -54,34 +55,35 @@ export default function Dashboard({ onLogout, onGoAdmin }) {
     };
   }, [wsUrl, session]);
 
-  const doTransfer = async () => {
+  const doTransfer = () => {
     setErr(""); setMsg("");
-    
-    // Input validation
+
     if (!toAccount || !toAccount.trim()) {
       setErr("Please enter recipient account number");
       return;
     }
-    
+
     const amountNum = Number(amount);
     if (!amount || isNaN(amountNum) || amountNum <= 0) {
       setErr("Please enter a valid amount greater than 0");
       return;
     }
-    
+
     if (!Number.isInteger(amountNum)) {
       setErr("Amount must be a whole number");
       return;
     }
-    
-    try {
-      const r = await api.transfer(toAccount.trim(), amountNum);
-      setMsg(`Transfer success: ${r.amount} to ${r.to} (${r.to_account_number})`);
-      setToAccount(""); setToName(""); setAmount("");
-      await load();
-    } catch (e) {
-      setErr(e.message);
-    }
+
+    startTransition(async () => {
+      try {
+        const r = await api.transfer(toAccount.trim(), amountNum);
+        setMsg(`Transfer success: ${r.amount} to ${r.to} (${r.to_account_number})`);
+        setToAccount(""); setToName(""); setAmount("");
+        await load();
+      } catch (e) {
+        setErr(e.message);
+      }
+    });
   };
 
   const lookup = async (acct) => {
@@ -148,7 +150,7 @@ export default function Dashboard({ onLogout, onGoAdmin }) {
           <Card title="Transfer" desc="Send money to another user">
             <div className="space-y-3">
               <input
-                className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-xl border px-4 py-3 text-sm outline-hidden focus:ring-2 focus:ring-blue-500"
                 placeholder="Recipient account number (e.g. 123456789012)"
                 inputMode="numeric"
                 value={toAccount}
@@ -159,7 +161,7 @@ export default function Dashboard({ onLogout, onGoAdmin }) {
                 Receiver: <span className="font-semibold">{toName || "—"}</span>
               </div>
               <input
-                className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-xl border px-4 py-3 text-sm outline-hidden focus:ring-2 focus:ring-blue-500"
                 placeholder="Amount (e.g. 1000)"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -167,12 +169,13 @@ export default function Dashboard({ onLogout, onGoAdmin }) {
               <div className="flex gap-3">
                 <button
                   onClick={doTransfer}
-                  className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                  disabled={isPending}
+                  className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
                 >
-                  Transfer
+                  {isPending ? "Sending..." : "Transfer"}
                 </button>
                 <button
-                  onClick={() => load().catch(()=>{})}
+                  onClick={() => load().catch(() => {})}
                   className="rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Refresh

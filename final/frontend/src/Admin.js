@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Layout from "./ui/Layout";
 import Card from "./ui/Card";
 import { api } from "./api";
@@ -8,17 +8,20 @@ const SECRET_KEY = "admin_secret";
 function AdminLogin({ onAuth }) {
   const [secret, setSecret] = useState("");
   const [err, setErr] = useState("");
+  const [isPending, startTransition] = useTransition();
 
-  const submit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
     setErr("");
-    try {
-      await api.adminStats(secret);
-      localStorage.setItem(SECRET_KEY, secret);
-      onAuth(secret);
-    } catch {
-      setErr("Invalid admin secret");
-    }
+    startTransition(async () => {
+      try {
+        await api.adminStats(secret);
+        localStorage.setItem(SECRET_KEY, secret);
+        onAuth(secret);
+      } catch {
+        setErr("Invalid admin secret");
+      }
+    });
   };
 
   return (
@@ -34,7 +37,7 @@ function AdminLogin({ onAuth }) {
         <form onSubmit={submit} className="space-y-4">
           <input
             type="password"
-            className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-amber-500"
+            className="w-full rounded-xl border px-4 py-3 text-sm outline-hidden focus:ring-2 focus:ring-amber-500"
             placeholder="Admin secret"
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
@@ -42,9 +45,10 @@ function AdminLogin({ onAuth }) {
           />
           <button
             type="submit"
-            className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700"
+            disabled={isPending}
+            className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
           >
-            Login
+            {isPending ? "Checking..." : "Login"}
           </button>
           {err && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
@@ -306,7 +310,7 @@ export default function Admin({ onBack }) {
             <Card title="Users" desc={`${total} total users`}>
           <form onSubmit={doSearch} className="mb-4 flex gap-2">
             <input
-              className="flex-1 rounded-xl border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500"
+              className="flex-1 rounded-xl border px-4 py-2 text-sm outline-hidden focus:ring-2 focus:ring-amber-500"
               placeholder="Search by name, phone, or account number..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}

@@ -1,8 +1,6 @@
-import React from "react";
-
 export default function Card({ title, desc, right, children }) {
   return (
-    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border bg-white p-5 shadow-xs">
       {(title || desc || right) && (
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>

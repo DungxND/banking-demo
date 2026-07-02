@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState, useTransition } from "react";
 import { api } from "./api";
 import Card from "./ui/Card";
 
@@ -8,20 +8,18 @@ export default function Register({ onGoLogin }) {
   const [password, setP] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
-  const submit = async () => {
-    if (loading) return;
-    setLoading(true);
+  const submit = () => {
     setErr(""); setMsg("");
-    try {
-      const r = await api.register(phone, username, password);
-      setMsg(`Account created. Your account number: ${r.account_number}. Please sign in.`);
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setLoading(false);
-    }
+    startTransition(async () => {
+      try {
+        const r = await api.register(phone, username, password);
+        setMsg(`Account created. Your account number: ${r.account_number}. Please sign in.`);
+      } catch (e) {
+        setErr(e.message);
+      }
+    });
   };
 
   return (
@@ -34,7 +32,7 @@ export default function Register({ onGoLogin }) {
         <div>
           <label className="text-xs font-medium text-slate-600">Phone</label>
           <input
-            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-hidden focus:ring-2 focus:ring-blue-500"
             placeholder="digits only (e.g. 0987654321)"
             inputMode="numeric"
             value={phone}
@@ -45,7 +43,7 @@ export default function Register({ onGoLogin }) {
         <div>
           <label className="text-xs font-medium text-slate-600">Display name</label>
           <input
-            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-hidden focus:ring-2 focus:ring-blue-500"
             placeholder="e.g. Kiet Nguyen"
             value={username}
             onChange={(e) => setU(e.target.value)}
@@ -55,7 +53,7 @@ export default function Register({ onGoLogin }) {
         <div>
           <label className="text-xs font-medium text-slate-600">Password</label>
           <input
-            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1 w-full rounded-xl border px-4 py-3 text-sm outline-hidden focus:ring-2 focus:ring-blue-500"
             placeholder="min 6 chars"
             type="password"
             value={password}
@@ -66,11 +64,11 @@ export default function Register({ onGoLogin }) {
         <div className="flex gap-3 pt-2">
           <button
             type="button"
-            disabled={loading}
+            disabled={isPending}
             onClick={submit}
             className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
           >
-            {loading ? "Creating..." : "Create account"}
+            {isPending ? "Creating..." : "Create account"}
           </button>
           <button
             type="button"

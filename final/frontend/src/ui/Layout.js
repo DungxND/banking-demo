@@ -1,5 +1,3 @@
-import React from "react";
-
 export default function Layout({ user, env = "LAB", onLogout, onBack, onGoAdmin, activePage = "dashboard", adminSubPage, onAdminSubPage, children }) {
   return (
     <div className="min-h-screen bg-slate-50">
@@ -48,7 +46,7 @@ export default function Layout({ user, env = "LAB", onLogout, onBack, onGoAdmin,
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-12">
         {/* Sidebar */}
         <aside className="lg:col-span-3">
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border bg-white p-4 shadow-xs">
             <div className="text-xs font-semibold text-slate-500">MENU</div>
             <div className="mt-3 space-y-2 text-sm">
               <div className={`rounded-xl px-3 py-2 font-semibold ${activePage === "dashboard" ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"}`}>Dashboard</div>
