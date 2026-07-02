@@ -2,7 +2,7 @@ frontend:
   fullnameOverride: frontend
   enabled: true
   image:
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   imagePullSecrets: []
   replicas: 1
   service:
