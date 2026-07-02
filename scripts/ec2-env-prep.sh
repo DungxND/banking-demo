@@ -85,7 +85,7 @@ curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
   | tar -xz -C /usr/local/bin --strip-components=1 linux-amd64/helm
 
 # ── 4. Clone repo ─────────────────────────────────────────────────────────────
-sudo -u "$LOGIN_USER" git clone "$REPO_URL" "$REPO_DIR"
+sudo -u "$LOGIN_USER" git clone --branch instana "$REPO_URL" "$REPO_DIR"
 
 # ── 5. Build images with Docker + import into k3s containerd ─────────────────
 # k3s uses its own containerd instance (/run/k3s/containerd/containerd.sock).
@@ -161,15 +161,35 @@ kubectl wait --for=condition=ready pod --all -n banking --timeout=300s
 #   com.instana.plugin.opentelemetry.grpc.listenAddress: 0.0.0.0:4317
 
 # ── Done ──────────────────────────────────────────────────────────────────────
-# IMDSv2-aware public IP lookup
-TOKEN=$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
-  -H "X-aws-ec2-metadata-token-ttl-seconds: 60" || true)
+# IMDSv2-aware public IP lookup.
+# --connect-timeout 3: don't hang if IMDS is slow on first boot.
+# Modern EC2 instances enforce IMDSv2 (token required); the IMDSv1 fallback is
+# kept only for older launch configs that still have it enabled.
+IMDS="http://169.254.169.254"
+TOKEN=$(curl -sf --connect-timeout 3 --max-time 5 \
+  -X PUT "${IMDS}/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null || true)
+
 if [ -n "$TOKEN" ]; then
-  PUBLIC_IP=$(curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" \
-    http://169.254.169.254/latest/meta-data/public-ipv4 || echo "<public-ip>")
+  PUBLIC_IP=$(curl -sf --connect-timeout 3 --max-time 5 \
+    -H "X-aws-ec2-metadata-token: $TOKEN" \
+    "${IMDS}/latest/meta-data/public-ipv4" 2>/dev/null || true)
 else
-  PUBLIC_IP=$(curl -sf http://169.254.169.254/latest/meta-data/public-ipv4 \
-    || echo "<public-ip>")
+  # IMDSv1 fallback (only works when hop-limit allows it)
+  PUBLIC_IP=$(curl -sf --connect-timeout 3 --max-time 5 \
+    "${IMDS}/latest/meta-data/public-ipv4" 2>/dev/null || true)
+fi
+
+# If the instance has no public IP (private-only VPC), use the private IP instead
+if [ -z "$PUBLIC_IP" ]; then
+  if [ -n "$TOKEN" ]; then
+    PUBLIC_IP=$(curl -sf --connect-timeout 3 --max-time 5 \
+      -H "X-aws-ec2-metadata-token: $TOKEN" \
+      "${IMDS}/latest/meta-data/local-ipv4" 2>/dev/null || echo "<instance-ip>")
+  else
+    PUBLIC_IP=$(curl -sf --connect-timeout 3 --max-time 5 \
+      "${IMDS}/latest/meta-data/local-ipv4" 2>/dev/null || echo "<instance-ip>")
+  fi
 fi
 
 echo ""
