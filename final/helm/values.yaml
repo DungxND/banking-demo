@@ -25,6 +25,8 @@ rabbitmq:
 kong:
   image:
     tag: "3.9"
+  # livenessProbe must live here — charts/kong/values.yaml is loaded
+  # via -f flag (higher precedence) and would override this if duplicated there.
   livenessProbe:
     enabled: true
     command: ["kong", "health"]

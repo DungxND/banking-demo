@@ -21,6 +21,11 @@ kong:
     type: ClusterIP
     hostPort: 80           # bound on the node NIC by the container runtime
 
+  # Recreate is mandatory on single-node clusters with hostPort.
+  # RollingUpdate causes the new pod to stay Pending (port 80 conflict).
+  # Switch to RollingUpdate when moving to multi-node + LoadBalancer.
+  updateStrategy: Recreate
+
   proxyPort: 8000
   adminPort: 8001
   proxyPortName: proxy

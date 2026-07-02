@@ -90,6 +90,11 @@ metadata:
     {{- include "banking-demo.kong.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.kong.replicas }}
+  # Recreate is required for hostPort workloads on single-node clusters.
+  # RollingUpdate would leave the old pod holding port 80 while the new pod
+  # tries to bind the same hostPort — the new pod stays Pending forever.
+  strategy:
+    type: {{ .Values.kong.updateStrategy | default "Recreate" }}
   selector:
     matchLabels:
       {{- include "banking-demo.kong.selectorLabels" . | nindent 6 }}
