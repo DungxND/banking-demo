@@ -130,7 +130,7 @@ spec:
               readOnly: true
           resources:
             {{- toYaml .Values.kong.resources | nindent 12 }}
-          {{- if .Values.kong.readinessProbe.enabled }}
+          {{- if ((.Values.kong.readinessProbe).enabled) }}
           readinessProbe:
             exec:
               command: {{ toJson .Values.kong.readinessProbe.command }}
@@ -138,7 +138,7 @@ spec:
             periodSeconds: {{ .Values.kong.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.kong.readinessProbe.timeoutSeconds }}
           {{- end }}
-          {{- if .Values.kong.livenessProbe.enabled }}
+          {{- if ((.Values.kong.livenessProbe).enabled) }}
           livenessProbe:
             exec:
               command: {{ toJson .Values.kong.livenessProbe.command }}

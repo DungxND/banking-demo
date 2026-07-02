@@ -25,6 +25,13 @@ rabbitmq:
 kong:
   image:
     tag: "3.9"
+  livenessProbe:
+    enabled: true
+    command: ["kong", "health"]
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
 
 # ── App services — image + shared defaults in one block each ─
 # Each service block is the complete override set:
