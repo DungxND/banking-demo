@@ -125,8 +125,8 @@ async def reply_rpc(
         Message(
             body=json.dumps(result).encode(),
             correlation_id=message.correlation_id,
-            # TRANSIENT — reply does not need to survive a broker restart.
-            delivery_mode=DeliveryMode.TRANSIENT,
+            # NOT_PERSISTENT — reply does not need to survive a broker restart.
+            delivery_mode=DeliveryMode.NOT_PERSISTENT,
         ),
         routing_key=message.reply_to,
     )
