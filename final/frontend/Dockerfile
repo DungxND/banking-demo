@@ -7,6 +7,9 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Replace the main nginx.conf so the Instana sensor can find stub_status.
+# The agent scans /proc/<pid>/root/etc/nginx/nginx.conf directly — it does
+# not follow conf.d/ includes, so stub_status must be in the main file.
+COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

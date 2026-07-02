@@ -49,6 +49,8 @@ spec:
               value: api-producer
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: "service.namespace=banking-demo"
+            - name: AUTOWRAPT_BOOTSTRAP
+              value: instana
             {{- if $svc.secretRef.keys.redisUrl }}
             - name: REDIS_URL
               valueFrom:
