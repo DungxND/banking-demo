@@ -33,8 +33,27 @@ def path_to_queue(path: str) -> str | None:
     return None
 
 
-async def create_connection():
-    return await aio_pika.connect_robust(RABBITMQ_URL)
+async def create_connection(logger: "Logger | None" = None):
+    """
+    Connect to RabbitMQ with unlimited retries on the initial attempt.
+    aio_pika.connect_robust retries reconnects after a drop, but raises
+    immediately if the very first attempt fails (e.g. DNS not yet ready).
+    This wrapper retries that first connect so services start cleanly
+    regardless of pod startup order.
+    """
+    delay = 2
+    attempt = 0
+    while True:
+        try:
+            return await aio_pika.connect_robust(RABBITMQ_URL)
+        except Exception as exc:
+            attempt += 1
+            if logger:
+                from common.logging_utils import log_event
+                log_event(logger, "rabbitmq_connecting",
+                          attempt=attempt, delay=delay, error=str(exc))
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 30)  # cap at 30s
 
 
 async def publish_and_wait(

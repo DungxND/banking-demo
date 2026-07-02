@@ -20,7 +20,7 @@ from redis.asyncio import Redis
 from common.db import SessionLocal, engine, Base, log_db_pool_status
 from common.models import Notification
 from common.redis_utils import get_user_id_from_session, set_presence, create_redis_client
-from common.rabbitmq_utils import reply_rpc
+from common.rabbitmq_utils import reply_rpc, create_connection
 from common.logging_utils import get_json_logger, log_event, log_error_event, should_log_request_flow
 from common.observability import instrument_fastapi, get_tracer
 
@@ -51,7 +51,7 @@ async def handle_notifications(payload: dict, headers: dict) -> dict:
 
 async def consume():
     import aio_pika
-    connection = await aio_pika.connect_robust(RABBITMQ_URL)
+    connection = await create_connection(logger)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=5)
     queue = await channel.declare_queue("notification.requests", durable=True)

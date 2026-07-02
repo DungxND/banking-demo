@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import aio_pika
 
-from common.rabbitmq_utils import path_to_queue, publish_and_wait
+from common.rabbitmq_utils import path_to_queue, publish_and_wait, create_connection
 from common.logging_utils import get_json_logger, log_event, log_error_event, setup_exception_logging, RequestLogMiddleware
 from common.observability import instrument_fastapi
 
@@ -29,7 +29,7 @@ rmq_connection: aio_pika.Connection | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global rmq_connection
-    rmq_connection = await aio_pika.connect_robust(RABBITMQ_URL)
+    rmq_connection = await create_connection(logger)
     log_event(logger, "rabbitmq_connected")
     yield
     if rmq_connection:
