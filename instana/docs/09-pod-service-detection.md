@@ -75,13 +75,22 @@ kubectl -n kube-system get pod -l app.kubernetes.io/name=traefik \
 
 ### 2. Python services not sending OTLP spans
 
-Each FastAPI service sets:
+Each FastAPI service sets the following env vars (added to all 5 Deployment templates in `final/helm/templates/`):
 ```yaml
+- name: NODE_IP
+  valueFrom:
+    fieldRef:
+      fieldPath: status.hostIP
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: "http://$(NODE_IP):4317"
+- name: OTEL_SERVICE_NAME
+  value: <service-name>           # unique per template
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: "service.namespace=banking-demo"
 ```
 
-`$(NODE_IP)` must expand to the EC2 node's IP **as seen from the pod**.
+`$(NODE_IP)` must expand to the EC2 node's IP **as seen from the pod**. Without `NODE_IP` defined
+via `fieldRef`, the `$(NODE_IP)` substitution produces a literal string and the OTLP exporter fails to connect.
 
 **Verify the endpoint resolved correctly**:
 ```bash
@@ -91,6 +100,7 @@ kubectl -n banking exec deploy/auth-service -- env | grep -E 'NODE_IP|OTEL'
 # NODE_IP=10.0.x.x
 # OTEL_EXPORTER_OTLP_ENDPOINT=http://10.0.x.x:4317
 # OTEL_SERVICE_NAME=auth-service
+# OTEL_RESOURCE_ATTRIBUTES=service.namespace=banking-demo
 ```
 
 **Verify the agent is listening on 4317**:
@@ -222,14 +232,17 @@ sudo grep -i "span\|otlp\|auth-service\|account-service" \
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| **Zero pods in Infrastructure ΓåÆ Kubernetes** | `enabled: false` in k8s plugin config, or kubeconfig not readable | See [`10-host-agent-k8s-detection-fix.md`](./10-host-agent-k8s-detection-fix.md) |
+| **Zero pods in Infrastructure → Kubernetes** | `enabled: false` in k8s plugin config, or kubeconfig not readable | See [`10-host-agent-k8s-detection-fix.md`](./10-host-agent-k8s-detection-fix.md) |
 | Services show 0 calls | No OTLP traces received | Send traffic; check OTEL endpoint in pods |
 | `Instana tracing is not enabled` in agent log | Traefik HelmChartConfig not applied / pod not restarted | `kubectl rollout restart deployment/traefik -n kube-system` |
 | `FrameworkEvent ERROR: Service factory returned null` | Traefik sensor init race with tracing-disabled Traefik | Transient; resolves after Traefik restart |
-| `NODE_IP` not resolving in pod env | `fieldRef.fieldPath: status.hostIP` missing | Check Deployment yaml has `NODE_IP` env var |
+| `NODE_IP` not resolving in pod env | `fieldRef.fieldPath: status.hostIP` missing from Deployment | All 5 Python service templates now include the `NODE_IP` fieldRef env var |
+| `python_sensor_not_installed` in Instana UI | `OTEL_EXPORTER_OTLP_ENDPOINT` not set → `observability.py:init_tracing()` skips silently | Fixed: `NODE_IP` + `OTEL_*` env vars added to all 5 Deployment templates |
 | Agent not listening on 4317 | OTel plugin disabled | Add `com.instana.plugin.opentelemetry: enabled: true` |
 | Pods visible in Infrastructure but not Applications | OTLP not flowing (no traffic, wrong endpoint) | Follow "Full Verification Sequence" above |
-| Frontend not in Applications/Services | Nginx has no OTLP ΓÇö expected | Normal: Nginx appears in Infrastructure only |
-| Kong not in Applications/Services | Kong has no OTLP ΓÇö expected | Normal: Kong appears via Kong Prometheus sensor |
-| Redis `SSL is disabled... Read timed out` | Transient SSL check timeout at sensor init | **Benign** ΓÇö sensor retries; check sensor is connected with `grep -i redis agent.log` |
-| Discovery timeout warnings in agent log | Normal on first boot ΓÇö many sensors load simultaneously | **Benign** ΓÇö sensors still activate; warnings go away after warm-up |
+| Frontend not in Applications/Services | Nginx has no OTLP — expected | Normal: Nginx appears in Infrastructure only |
+| `nginx_status_not_found` in Instana UI | `stub_status` location missing from `nginx.conf` | Fixed: `/nginx_status` location added to `final/frontend/nginx.conf` |
+| `postgresql_connection_failed` with `user: postgres` | Agent auto-discovered Postgres process; defaulted to `postgres` user ignoring `configuration.yaml` | Pod is headless ClusterIP — agent cannot reach it. Error is cosmetic. `configuration.yaml` has correct `user: banking` for when a NodePort is added. |
+| Kong not in Applications/Services | Kong has no OTLP — expected | Normal: Kong appears via Kong Prometheus sensor |
+| Redis `SSL is disabled... Read timed out` | Transient SSL check timeout at sensor init | **Benign** — sensor retries; check sensor is connected with `grep -i redis agent.log` |
+| Discovery timeout warnings in agent log | Normal on first boot — many sensors load simultaneously | **Benign** — sensors still activate; warnings go away after warm-up |

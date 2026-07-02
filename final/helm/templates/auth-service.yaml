@@ -41,6 +41,16 @@ spec:
           resources:
             {{- toYaml $svc.resources | nindent 12 }}
           env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(NODE_IP):4317"
+            - name: OTEL_SERVICE_NAME
+              value: auth-service
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=banking-demo"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
