@@ -3,8 +3,6 @@ api-producer:
   fullnameOverride: api-producer
   enabled: true
   image:
-    repository: ghcr.io/dungxnd/banking-demo/api-producer
-    tag: latest
     pullPolicy: Always
   replicas: 1
   service:

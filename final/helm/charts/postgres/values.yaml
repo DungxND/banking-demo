@@ -3,7 +3,6 @@ postgres:
   enabled: true
   image:
     repository: postgres
-    tag: "18"
     pullPolicy: IfNotPresent
   imagePullSecrets: []
   replicas: 1

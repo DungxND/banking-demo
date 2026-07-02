@@ -2,8 +2,6 @@ account-service:
   fullnameOverride: account-service
   enabled: true
   image:
-    repository: ghcr.io/dungxnd/banking-demo/account-service
-    tag: latest
     pullPolicy: Always
   imagePullSecrets: []
   replicas: 1

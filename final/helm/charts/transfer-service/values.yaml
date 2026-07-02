@@ -2,8 +2,6 @@ transfer-service:
   fullnameOverride: transfer-service
   enabled: true
   image:
-    repository: ghcr.io/dungxnd/banking-demo/transfer-service
-    tag: latest
     pullPolicy: Always
   imagePullSecrets: []
   replicas: 1

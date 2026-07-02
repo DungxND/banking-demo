@@ -1,2 +1,167 @@
-# Root values.yaml — defaults only. Phase 8 overrides live in values-phase8.yaml.
-# All per-service config is in charts/<name>/values.yaml.
+# ============================================================
+# values.yaml — single source of truth for versions + shared defaults.
+# Helm deep-merges these over charts/<name>/values.yaml.
+# Templates need no changes; per-chart values remain as fallback.
+# ============================================================
+
+# ── Infrastructure image versions ───────────────────────────
+postgres:
+  image:
+    tag: "18"
+
+redis:
+  image:
+    tag: "8-alpine"
+
+rabbitmq:
+  image:
+    tag: "4-management-alpine"
+
+# ── Kong version ─────────────────────────────────────────────
+kong:
+  image:
+    tag: "3.9"
+
+# ── App services — image + shared defaults in one block each ─
+# Each service block is the complete override set:
+#   image (registry + tag), secretRef, rabbitmqSecretRef, resources, securityContext.
+# Per-chart files only keep: port, probes, replicas, pullPolicy.
+# Override at deploy: --set auth-service.image.tag=abc123
+#                     --set auth-service.resources.limits.memory=1Gi
+
+auth-service:
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/auth-service
+    tag: latest
+  secretRef:
+    name: banking-db-secret
+    keys:
+      databaseUrl: DATABASE_URL
+      redisUrl: REDIS_URL
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+    container:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+
+account-service:
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/account-service
+    tag: latest
+  secretRef:
+    name: banking-db-secret
+    keys:
+      databaseUrl: DATABASE_URL
+      redisUrl: REDIS_URL
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+    container:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+
+transfer-service:
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/transfer-service
+    tag: latest
+  secretRef:
+    name: banking-db-secret
+    keys:
+      databaseUrl: DATABASE_URL
+      redisUrl: REDIS_URL
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+    container:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+
+notification-service:
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/notification-service
+    tag: latest
+  secretRef:
+    name: banking-db-secret
+    keys:
+      databaseUrl: DATABASE_URL
+      redisUrl: REDIS_URL
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+    container:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+
+# api-producer has no databaseUrl (stateless HTTP proxy)
+api-producer:
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/api-producer
+    tag: latest
+  secretRef:
+    name: banking-db-secret
+    keys:
+      redisUrl: REDIS_URL
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+frontend:
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/frontend
+    tag: latest

@@ -3,7 +3,6 @@ kong:
   enabled: true
   image:
     repository: kong
-    tag: "3.9"
     pullPolicy: IfNotPresent
   imagePullSecrets: []
   replicas: 1

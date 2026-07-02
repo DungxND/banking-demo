@@ -2,8 +2,6 @@ notification-service:
   fullnameOverride: notification-service
   enabled: true
   image:
-    repository: ghcr.io/dungxnd/banking-demo/notification-service
-    tag: latest
     pullPolicy: Always
   imagePullSecrets: []
   replicas: 1

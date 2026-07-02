@@ -1,10 +1,15 @@
 """
 Observability: OpenTelemetry tracing + Prometheus metrics.
-- Tracing: OTLP export to collector (optional via OTEL_EXPORTER_OTLP_ENDPOINT).
-- Metrics: Prometheus /metrics endpoint.
+- Tracing: OTLP/gRPC export. Endpoint from OTEL_EXPORTER_OTLP_ENDPOINT env var.
+  http:// scheme is stripped — gRPC channel needs bare host:port.
+  If env var is unset, tracing is silently skipped.
+- Metrics: Prometheus /metrics endpoint via prometheus_client.
 """
+import logging
 import os
 from prometheus_client import Counter, Histogram, generate_latest, CollectorRegistry
+
+_log = logging.getLogger(__name__)
 
 _metrics_registry: CollectorRegistry | None = None
 _request_count: Counter | None = None
@@ -12,9 +17,9 @@ _request_latency: Histogram | None = None
 
 
 def init_tracing(service_name: str) -> None:
-    """Initialize OpenTelemetry tracer; export to OTLP if OTEL_EXPORTER_OTLP_ENDPOINT is set."""
-    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
-    if not endpoint:
+    """Initialize OTel tracer. No-op if OTEL_EXPORTER_OTLP_ENDPOINT is unset."""
+    raw = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
+    if not raw:
         return
     try:
         from opentelemetry import trace
@@ -23,19 +28,20 @@ def init_tracing(service_name: str) -> None:
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
         from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 
+        # Strip http:// or https:// — gRPC channel uses bare host:port.
+        endpoint = raw.removeprefix("https://").removeprefix("http://")
+
         resource = Resource.create({SERVICE_NAME: service_name})
         provider = TracerProvider(resource=resource)
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True)))
         trace.set_tracer_provider(provider)
 
-        # Redis instrumentation — trace mỗi lệnh Redis (GET, SET, ...) để xem latency
         try:
             from opentelemetry.instrumentation.redis import RedisInstrumentor
             RedisInstrumentor().instrument()
         except Exception:
             pass
 
-        # SQLAlchemy instrumentation — trace mỗi query DB để xem latency
         try:
             from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
             from common import db
@@ -43,12 +49,14 @@ def init_tracing(service_name: str) -> None:
                 SQLAlchemyInstrumentor().instrument(engine=db.engine)
         except Exception:
             pass
+
+        _log.info("OTel tracing initialised: service=%s endpoint=%s", service_name, endpoint)
     except Exception:
         pass
 
 
 def get_tracer(service_name: str):
-    """Get tracer for manual spans. Returns None if tracing not initialized."""
+    """Get tracer for manual spans. Returns None if tracing not initialised."""
     try:
         from opentelemetry import trace
         return trace.get_tracer(service_name, "1.0")
@@ -80,8 +88,10 @@ def get_metrics_content() -> bytes:
 
 
 def instrument_fastapi(app, service_name: str) -> None:
+    """Wire up OTel tracing + Prometheus metrics + /metrics route for a FastAPI app."""
     init_tracing(service_name)
     setup_metrics(service_name)
+
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         FastAPIInstrumentor.instrument_app(app)

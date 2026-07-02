@@ -1,6 +1,7 @@
 # Taste (Continuously Learned by [CommandCode][cmd])
 
 [cmd]: https://commandcode.ai/
+
 
 # python-dependency-upgrades
 - When upgrading package versions, actively identify and implement new features and API improvements from the newer versions rather than only bumping versions with minimal compatibility-preserving changes. Confidence: 0.65
