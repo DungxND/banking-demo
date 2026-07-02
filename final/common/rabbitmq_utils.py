@@ -1,6 +1,6 @@
 """
 RabbitMQ utilities — RPC edition.
-publish_and_wait: uses amq.rabbitmq.reply-to (Direct Reply-to), no Redis polling.
+publish_and_wait: uses an exclusive auto-delete callback queue per request.
 reply_rpc:        consumer sends result back via message.reply_to.
 """
 import asyncio
@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import aio_pika
 from aio_pika import Message, DeliveryMode
+from aio_pika.abc import AbstractIncomingMessage
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -45,30 +46,33 @@ async def publish_and_wait(
     logger: "Logger | None" = None,
 ) -> dict:
     """
-    Publish to queue and await response via RabbitMQ Direct Reply-to.
+    Publish to queue and await response via an exclusive callback queue.
 
-    The producer subscribes to amq.rabbitmq.reply-to BEFORE publishing so
-    that no reply can arrive before the consumer tag is registered. The
-    asyncio.Future is resolved by the on_reply callback and the consumer
-    tag is cancelled in the finally block regardless of outcome.
+    Following the aio_pika RPC tutorial pattern:
+      - Declare an exclusive, auto-delete reply queue (broker assigns the name).
+      - Subscribe to it with no_ack=True BEFORE publishing.
+      - Set reply_to=callback_queue.name on the outgoing message.
+      - Await the Future; delete the queue in the finally block.
+
+    This avoids the amq.rabbitmq.reply-to pseudo-queue, which aio_pika's
+    high-level API cannot consume via get_queue() or declare_queue().
     """
     from common.logging_utils import log_event, should_log_request_flow
 
     correlation_id = str(uuid.uuid4())
     body["correlation_id"] = correlation_id
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     future: asyncio.Future[dict] = loop.create_future()
 
-    # amq.rabbitmq.reply-to is a pseudo-queue managed by the broker.
-    # Consume it with no_ack=True — the broker requires this for Direct Reply-to.
-    reply_queue = await channel.get_queue("amq.rabbitmq.reply-to")
+    # Exclusive + auto_delete: broker names the queue, deletes it when we cancel.
+    callback_queue = await channel.declare_queue(exclusive=True, auto_delete=True)
 
-    async def on_reply(message: aio_pika.IncomingMessage) -> None:
+    async def on_reply(message: AbstractIncomingMessage) -> None:
         if message.correlation_id == correlation_id and not future.done():
             future.set_result(json.loads(message.body.decode()))
 
-    consumer_tag = await reply_queue.consume(on_reply, no_ack=True)
+    consumer_tag = await callback_queue.consume(on_reply, no_ack=True)
 
     # Declare the work queue (idempotent) and publish.
     await channel.declare_queue(queue_name, durable=True)
@@ -77,7 +81,7 @@ async def publish_and_wait(
             body=json.dumps(body).encode(),
             delivery_mode=DeliveryMode.PERSISTENT,
             correlation_id=correlation_id,
-            reply_to="amq.rabbitmq.reply-to",
+            reply_to=callback_queue.name,
             headers=headers or {},
         ),
         routing_key=queue_name,
@@ -98,7 +102,7 @@ async def publish_and_wait(
         raise TimeoutError(f"No RPC reply for {correlation_id} within {timeout}s")
     finally:
         try:
-            await reply_queue.cancel(consumer_tag)
+            await callback_queue.cancel(consumer_tag)
         except Exception:
             pass
 
