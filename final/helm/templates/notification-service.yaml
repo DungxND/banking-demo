@@ -27,6 +27,10 @@ spec:
       imagePullSecrets:
         {{- toYaml $svc.imagePullSecrets | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: wait-for-rabbitmq
+          image: busybox:1.38
+          command: ['sh', '-c', 'until nc -z rabbitmq 5672; do echo "waiting for rabbitmq"; sleep 2; done']
       containers:
         - name: notification-service
           image: "{{ $svc.image.repository }}:{{ $svc.image.tag }}"
