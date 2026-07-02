@@ -93,8 +93,11 @@ spec:
   # Recreate is required for hostPort workloads on single-node clusters.
   # RollingUpdate would leave the old pod holding port 80 while the new pod
   # tries to bind the same hostPort — the new pod stays Pending forever.
+  # rollingUpdate must be explicitly null — Kubernetes forbids it being present
+  # when type is Recreate, and SSA will reject the update otherwise.
   strategy:
     type: {{ .Values.kong.updateStrategy | default "Recreate" }}
+    rollingUpdate: null
   selector:
     matchLabels:
       {{- include "banking-demo.kong.selectorLabels" . | nindent 6 }}
