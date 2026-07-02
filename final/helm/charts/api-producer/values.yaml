@@ -1,0 +1,34 @@
+# API Producer — Phase 8 entry point (Kong → Producer → RabbitMQ → Consumers)
+api-producer:
+  fullnameOverride: api-producer
+  enabled: true
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/api-producer
+    tag: latest
+    pullPolicy: Always
+  replicas: 1
+  service:
+    port: 8080
+    portName: http
+  secretRef:
+    name: banking-db-secret
+    keys:
+      redisUrl: REDIS_URL
+  # RABBITMQ_URL read from a separate Secret (create manually, do NOT commit)
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+  extraEnv: {}
+  readinessProbe:
+    enabled: true
+    path: /health
+    port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 15
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"

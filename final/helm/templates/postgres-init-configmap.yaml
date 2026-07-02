@@ -1,0 +1,15 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "banking-demo.postgres.labels" . | nindent 4 }}
+data:
+  01-stats-tracking.sql: |
+    ALTER SYSTEM SET track_counts = on;
+    ALTER SYSTEM SET track_io_timing = on;
+    ALTER SYSTEM SET track_activities = on;
+    SELECT pg_reload_conf();
+{{- end }}

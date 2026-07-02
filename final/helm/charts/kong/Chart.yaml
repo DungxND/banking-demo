@@ -1,0 +1,5 @@
+apiVersion: v2
+name: kong
+description: Kong API Gateway (DB-less, declarative config)
+type: application
+version: 0.1.0

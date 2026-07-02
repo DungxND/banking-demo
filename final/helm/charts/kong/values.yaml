@@ -1,0 +1,78 @@
+kong:
+  fullnameOverride: kong
+  enabled: true
+  image:
+    repository: kong
+    tag: "3.9"
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  replicas: 1
+  proxyPort: 8000
+  adminPort: 8001
+  proxyPortName: proxy
+  adminPortName: admin
+  configMountPath: /kong
+  configFileName: kong.yml
+  configMapName: kong-config
+  env:
+    KONG_DATABASE: "off"
+    KONG_DECLARATIVE_CONFIG: "/kong/kong.yml"
+    KONG_PROXY_ACCESS_LOG: "/dev/stdout"
+    KONG_ADMIN_ACCESS_LOG: "/dev/stdout"
+    KONG_PROXY_ERROR_LOG: "/dev/stderr"
+    KONG_ADMIN_ERROR_LOG: "/dev/stderr"
+    KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+    KONG_PROXY_LISTEN: "0.0.0.0:8000"
+    KONG_NGINX_WORKER_PROCESSES: "1"
+  # Phase 8: /api/* → api-producer, /ws → notification-service direct
+  backends:
+    - name: api-producer
+      url: "http://api-producer:8080"
+      routes:
+        - name: api-route
+          paths: ["/api"]
+          strip_path: false
+    - name: notification-service
+      url: "http://notification-service:8004"
+      routes:
+        - name: notification-ws-route
+          paths: ["/ws"]
+          strip_path: false
+          protocols: ["http", "https"]
+  # No domain needed — use wildcard "*" for EC2 with unfixed IP.
+  # Restrict to a specific origin once you have a domain or stable IP.
+  corsOrigins: "*"
+  corsCredentials: false  # Must be false when origins is "*"
+  corsMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  corsHeaders:
+    - Accept
+    - Accept-Version
+    - Content-Length
+    - Content-MD5
+    - Content-Type
+    - Date
+    - X-Session
+  globalPlugins:
+    - name: prometheus
+  extraPlugins: []
+  readinessProbe:
+    enabled: true
+    command: ["kong", "health"]
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 10
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+    container:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]

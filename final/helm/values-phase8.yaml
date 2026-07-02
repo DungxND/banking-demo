@@ -1,0 +1,61 @@
+# Phase 8 — overrides for final/helm/
+# Apply last: helm upgrade --install banking-demo . -n banking \
+#   -f charts/common/values.yaml \
+#   -f charts/postgres/values.yaml \
+#   -f charts/redis/values.yaml \
+#   -f charts/kong/values.yaml \
+#   -f charts/auth-service/values.yaml \
+#   -f charts/account-service/values.yaml \
+#   -f charts/transfer-service/values.yaml \
+#   -f charts/notification-service/values.yaml \
+#   -f charts/api-producer/values.yaml \
+#   -f charts/frontend/values.yaml \
+#   -f values-phase8.yaml
+
+# Kong: all /api/* → api-producer; /ws → notification-service direct
+kong:
+  backends:
+    - name: api-producer
+      url: "http://api-producer:8080"
+      routes:
+        - name: api-route
+          paths: ["/api"]
+          strip_path: false
+    - name: notification-service
+      url: "http://notification-service:8004"
+      routes:
+        - name: notification-ws-route
+          paths: ["/ws"]
+          strip_path: false
+          protocols: ["http", "https"]
+
+# api-producer: Phase 8 HTTP entry point
+api-producer:
+  enabled: true
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/api-producer
+    tag: latest
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+
+# Consumers read from RabbitMQ (Secret created manually, not in git)
+auth-service:
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+
+account-service:
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+
+transfer-service:
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+
+notification-service:
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL

@@ -1,0 +1,2 @@
+# Root values.yaml — defaults only. Phase 8 overrides live in values-phase8.yaml.
+# All per-service config is in charts/<name>/values.yaml.

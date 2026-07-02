@@ -1,0 +1,5 @@
+apiVersion: v2
+name: auth-service
+description: Auth Service — RabbitMQ consumer
+type: application
+version: 0.1.0

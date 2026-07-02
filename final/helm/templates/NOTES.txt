@@ -1,0 +1,21 @@
+Banking Demo (Phase 8) installed.
+Architecture: Kong → API Producer → RabbitMQ → Consumers (auth/account/transfer/notification) → Redis response
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Deploy command (from final/helm/):
+  helm upgrade --install banking-demo . -n banking --create-namespace \
+    -f charts/common/values.yaml \
+    -f charts/postgres/values.yaml \
+    -f charts/redis/values.yaml \
+    -f charts/kong/values.yaml \
+    -f charts/auth-service/values.yaml \
+    -f charts/account-service/values.yaml \
+    -f charts/transfer-service/values.yaml \
+    -f charts/notification-service/values.yaml \
+    -f charts/api-producer/values.yaml \
+    -f charts/frontend/values.yaml \
+    -f values-phase8.yaml
+
+Ingress host: {{ .Values.ingress.host | default "localhost" }}

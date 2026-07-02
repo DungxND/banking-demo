@@ -1,0 +1,76 @@
+# Cấu hình dùng chung — global, namespace, secret, ingress
+global:
+  namespace: banking
+  secretName: banking-db-secret
+  corsOrigins: "http://localhost:3000"
+
+namespace:
+  enabled: true
+
+secret:
+  enabled: true
+  postgresUser: banking
+  postgresPassword: bankingpass
+  postgresDb: banking
+  databaseUrl: "postgresql://banking:bankingpass@postgres:5432/banking"
+  redisUrl: "redis://redis:6379/0"
+
+dbMigration:
+  enabled: false
+  image: "postgres:18-alpine"
+  hookWeight: "-10"
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+externalPostgres:
+  enabled: false
+  host: "db.example.local"
+  port: "5432"
+  db: "banking"
+  user: "banking"
+
+smokeTest:
+  enabled: false
+  image: "curlimages/curl:8.11.0"
+  hookWeight: "10"
+  backoffLimit: 1
+  activeDeadlineSeconds: 120
+  authUser: "smoke-user"
+  authPassword: "smoke-pass"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+ingress:
+  enabled: true
+  className: traefik  # k3d default. Change to nginx or haproxy for other clusters.
+  host: ""            # Leave empty to match any IP (EC2 without domain).
+                      # Set to a domain name if you have one: e.g. "my-ec2.example.com"
+  name: banking-ingress
+  paths:
+    - path: /
+      pathType: Prefix
+      serviceName: frontend
+      servicePort: 80
+    - path: /api
+      pathType: Prefix
+      serviceName: kong
+      servicePort: 8000
+    - path: /ws
+      pathType: Prefix
+      serviceName: kong
+      servicePort: 8000
+
+kongExternalService:
+  enabled: false

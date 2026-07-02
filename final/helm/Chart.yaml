@@ -1,0 +1,13 @@
+apiVersion: v2
+name: banking-demo
+description: Banking Demo Phase 8 — Kong → API Producer → RabbitMQ → Consumers
+type: application
+version: 0.1.0
+appVersion: "8"
+keywords:
+  - banking
+  - microservices
+  - kong
+  - rabbitmq
+  - redis
+kubeVersion: ">=1.24"

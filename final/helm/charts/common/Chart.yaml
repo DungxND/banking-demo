@@ -1,0 +1,5 @@
+apiVersion: v2
+name: common
+description: Common config — global, namespace, secret, ingress
+type: application
+version: 0.1.0

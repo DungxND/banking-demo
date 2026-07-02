@@ -1,0 +1,44 @@
+auth-service:
+  fullnameOverride: auth-service
+  enabled: true
+  image:
+    repository: ghcr.io/dungxnd/banking-demo/auth-service
+    tag: latest
+    pullPolicy: Always
+  imagePullSecrets: []
+  replicas: 1
+  service:
+    port: 8001
+    portName: http
+  secretRef:
+    name: banking-db-secret
+    keys:
+      databaseUrl: DATABASE_URL
+      redisUrl: REDIS_URL
+  rabbitmqSecretRef:
+    name: rabbitmq-connection-secret
+    key: RABBITMQ_URL
+  corsOrigins: "http://localhost:3000"
+  extraEnv: {}
+  readinessProbe:
+    enabled: true
+    path: /health
+    port: 8001
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 1
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+    container:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
