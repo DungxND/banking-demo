@@ -1,0 +1,108 @@
+{{- if .Values.rabbitmq.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "banking-demo.rabbitmq.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  {{- if and .Values.rabbitmq.hook.preInstall .Values.rabbitmq.hook.preUpgrade }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: {{ .Values.rabbitmq.hook.weight | quote }}
+  {{- end }}
+  labels:
+    app: {{ include "banking-demo.rabbitmq.fullname" . }}
+    {{- include "banking-demo.rabbitmq.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "banking-demo.rabbitmq.fullname" . }}
+  replicas: {{ .Values.rabbitmq.replicas }}
+  selector:
+    matchLabels:
+      {{- include "banking-demo.rabbitmq.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "banking-demo.rabbitmq.fullname" . }}
+        {{- include "banking-demo.rabbitmq.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.rabbitmq.securityContext.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: rabbitmq
+          image: "{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag }}"
+          imagePullPolicy: {{ .Values.rabbitmq.image.pullPolicy }}
+          {{- with .Values.rabbitmq.securityContext.container }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.rabbitmq.service.amqpPort }}
+              name: {{ .Values.rabbitmq.service.amqpPortName }}
+            - containerPort: {{ .Values.rabbitmq.service.mgmtPort }}
+              name: {{ .Values.rabbitmq.service.mgmtPortName }}
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rabbitmq.secretRef.name }}
+                  key: {{ .Values.rabbitmq.secretRef.usernameKey }}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.rabbitmq.secretRef.name }}
+                  key: {{ .Values.rabbitmq.secretRef.passwordKey }}
+          resources:
+            {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
+          volumeMounts:
+            - name: {{ .Values.rabbitmq.storage.volumeName }}
+              mountPath: {{ .Values.rabbitmq.storage.mountPath }}
+          {{- if .Values.rabbitmq.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command: {{ toJson .Values.rabbitmq.readinessProbe.command }}
+            initialDelaySeconds: {{ .Values.rabbitmq.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.rabbitmq.readinessProbe.periodSeconds }}
+            {{- if .Values.rabbitmq.readinessProbe.timeoutSeconds }}
+            timeoutSeconds: {{ .Values.rabbitmq.readinessProbe.timeoutSeconds }}
+            {{- end }}
+          {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Values.rabbitmq.storage.volumeName }}
+      spec:
+        storageClassName: {{ .Values.rabbitmq.storage.storageClassName | quote }}
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.rabbitmq.storage.size | quote }}
+{{- end }}
+---
+{{- if .Values.rabbitmq.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "banking-demo.rabbitmq.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  {{- if and .Values.rabbitmq.hook.preInstall .Values.rabbitmq.hook.preUpgrade }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: {{ .Values.rabbitmq.hook.weight | quote }}
+  {{- end }}
+  labels:
+    app: {{ include "banking-demo.rabbitmq.fullname" . }}
+    {{- include "banking-demo.rabbitmq.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.rabbitmq.service.amqpPort }}
+      targetPort: {{ .Values.rabbitmq.service.amqpPort }}
+      name: {{ .Values.rabbitmq.service.amqpPortName }}
+    - port: {{ .Values.rabbitmq.service.mgmtPort }}
+      targetPort: {{ .Values.rabbitmq.service.mgmtPort }}
+      name: {{ .Values.rabbitmq.service.mgmtPortName }}
+  {{- if .Values.rabbitmq.service.clusterIP }}
+  clusterIP: {{ .Values.rabbitmq.service.clusterIP }}
+  {{- end }}
+  selector:
+    {{- include "banking-demo.rabbitmq.selectorLabels" . | nindent 4 }}
+{{- end }}

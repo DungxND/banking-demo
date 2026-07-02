@@ -14,6 +14,9 @@ secret:
   postgresDb: banking
   databaseUrl: "postgresql://banking:bankingpass@postgres:5432/banking"
   redisUrl: "redis://redis:6379/0"
+  rabbitmqUser: banking
+  rabbitmqPassword: bankingpass
+  rabbitmqUrl: "amqp://banking:bankingpass@rabbitmq:5672/"
 
 dbMigration:
   enabled: false

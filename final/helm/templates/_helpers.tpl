@@ -135,7 +135,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/* --- rabbitmq --- */}}
-{{- define "banking-demo.rabbitmq.fullname" -}}{{- (index .Values "rabbitmq").fullnameOverride | default "rabbitmq" -}}{{- end -}}
+{{- define "banking-demo.rabbitmq.fullname" -}}{{- .Values.rabbitmq.fullnameOverride | default "rabbitmq" -}}{{- end -}}
 {{- define "banking-demo.rabbitmq.labels" -}}
 app.kubernetes.io/name: {{ include "banking-demo.rabbitmq.fullname" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}

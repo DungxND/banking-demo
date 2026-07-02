@@ -1,0 +1,47 @@
+rabbitmq:
+  fullnameOverride: rabbitmq
+  enabled: true
+  image:
+    repository: rabbitmq
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  replicas: 1
+  service:
+    amqpPort: 5672
+    amqpPortName: amqp
+    mgmtPort: 15672
+    mgmtPortName: management
+    clusterIP: None
+  secretRef:
+    name: rabbitmq-connection-secret
+    usernameKey: rabbitmq-username
+    passwordKey: rabbitmq-password
+  storage:
+    storageClassName: local-path
+    size: 2Gi
+    volumeName: rabbitmq-data
+    mountPath: /var/lib/rabbitmq
+  readinessProbe:
+    enabled: true
+    command: ["rabbitmq-diagnostics", "ping"]
+    initialDelaySeconds: 20
+    periodSeconds: 15
+    timeoutSeconds: 10
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  securityContext:
+    pod:
+      seccompProfile:
+        type: RuntimeDefault
+      fsGroup: 999
+    container:
+      allowPrivilegeEscalation: false
+  hook:
+    preInstall: true
+    preUpgrade: true
+    weight: "-6"

@@ -75,7 +75,7 @@ final/
 ├── kong-compose.yml         # Kong DB-less declarative config for Compose
 │
 ├── rabbitmq/
-│   ├── k8s-rabbitmq-standalone.yaml   # RabbitMQ in its own namespace (k8s)
+│   ├── k8s-rabbitmq-standalone.yaml   # Legacy standalone manifest (superseded by Helm chart)
 │   └── values-rabbitmq-ha.yaml        # RabbitMQ HA Helm values (production)
 │
 ├── kong-ha/
@@ -176,49 +176,9 @@ Then update image repositories in `final/helm/values.yaml` (or pass `--set` at d
 - `helm` ≥ 3.12
 - Images pushed to a registry accessible from the cluster
 
-### 2. Namespace
+### 2. Deploy
 
-```bash
-kubectl create namespace banking
-kubectl create namespace rabbit
-```
-
-### 3. Secrets
-
-Secrets are created manually and **never committed to git**.
-
-```bash
-# Postgres + Redis credentials (referenced by all consumers)
-kubectl create secret generic banking-db-secret \
-  --from-literal=DATABASE_URL='postgresql://banking:<PASSWORD>@postgres:5432/banking' \
-  --from-literal=REDIS_URL='redis://redis:6379/0' \
-  -n banking
-
-# RabbitMQ connection (referenced by api-producer + all consumers)
-kubectl create secret generic rabbitmq-connection-secret \
-  --from-literal=RABBITMQ_URL='amqp://banking:<PASSWORD>@rabbitmq.rabbit.svc.cluster.local:5672/' \
-  -n banking
-
-# RabbitMQ pod credentials (used by the RabbitMQ StatefulSet itself)
-kubectl create secret generic rabbitmq-secret \
-  --from-literal=rabbitmq-username=banking \
-  --from-literal=rabbitmq-password='<PASSWORD>' \
-  -n rabbit
-```
-
-> Replace `<PASSWORD>` with a strong random value. Use the same password in all three secrets that reference RabbitMQ.
-
-### 4. Deploy RabbitMQ
-
-RabbitMQ runs in its own namespace with a standalone StatefulSet:
-
-```bash
-kubectl apply -f final/rabbitmq/k8s-rabbitmq-standalone.yaml
-# Wait for RabbitMQ to be ready before deploying the app
-kubectl rollout status statefulset/rabbitmq -n rabbit
-```
-
-### 5. Deploy the app
+Everything — including Postgres, Redis, RabbitMQ, Kong, all services, and all secrets — is managed by the Helm chart. A single command deploys the full stack:
 
 ```bash
 cd final/helm
@@ -228,6 +188,7 @@ helm upgrade --install banking-demo . \
   -f charts/common/values.yaml \
   -f charts/postgres/values.yaml \
   -f charts/redis/values.yaml \
+  -f charts/rabbitmq/values.yaml \
   -f charts/kong/values.yaml \
   -f charts/auth-service/values.yaml \
   -f charts/account-service/values.yaml \
@@ -247,11 +208,10 @@ helm upgrade --install banking-demo . \
   --set ingress.host=banking.example.com
 ```
 
-### 6. Verify
+### 3. Verify
 
 ```bash
 kubectl get pods -n banking
-kubectl get pods -n rabbit
 kubectl get ingress -n banking
 ```
 
@@ -281,7 +241,7 @@ All services read configuration from environment variables injected via Kubernet
 |----------|---------|---------|
 | `DATABASE_URL` | `postgresql://banking:bankingpass@postgres:5432/banking` | auth, account, transfer, notification |
 | `REDIS_URL` | `redis://redis:6379/0` | auth, account, transfer, notification (session / cache / WebSocket notify) |
-| `RABBITMQ_URL` | `amqp://banking:bankingpass@rabbitmq:5672/` | api-producer + all consumers |
+| `RABBITMQ_URL` | `amqp://banking:bankingpass@rabbitmq:5672/` | api-producer + all consumers (injected from `rabbitmq-connection-secret`) |
 | `RABBITMQ_RESPONSE_TIMEOUT` | `60` | api-producer — seconds to await RPC reply before 504 |
 | `LOG_LEVEL` | `INFO` | all services |
 | `LOG_REQUEST_FLOW` | `true` | set `false` to suppress per-request log lines |
@@ -444,13 +404,13 @@ kubectl rollout restart deployment/auth-service -n banking
 kubectl scale deployment/transfer-service --replicas=3 -n banking
 
 # Check RabbitMQ queue depths
-kubectl exec -n rabbit statefulset/rabbitmq -- rabbitmqctl list_queues name messages consumers
+kubectl exec -n banking statefulset/rabbitmq -- rabbitmqctl list_queues name messages consumers
 
 # Open a psql session to the in-cluster Postgres
 kubectl exec -it -n banking deploy/postgres -- psql -U banking banking
 
 # Port-forward the RabbitMQ management UI locally
-kubectl port-forward -n rabbit statefulset/rabbitmq 15672:15672
+kubectl port-forward -n banking statefulset/rabbitmq 15672:15672
 # Then open http://localhost:15672
 
 # Uninstall the app (keeps PVCs and secrets)

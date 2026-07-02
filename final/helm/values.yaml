@@ -16,6 +16,10 @@ redis:
 rabbitmq:
   image:
     tag: "4-management-alpine"
+  secretRef:
+    name: rabbitmq-connection-secret
+    usernameKey: rabbitmq-username
+    passwordKey: rabbitmq-password
 
 # ── Kong version ─────────────────────────────────────────────
 kong:
