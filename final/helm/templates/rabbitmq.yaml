@@ -28,6 +28,31 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        # Fix .erlang.cookie permissions — RabbitMQ refuses to start if the
+        # file is not exactly 0400 (owner-read only). On PVC restarts the
+        # file survives but permissions can be widened by the container runtime
+        # or fsGroup ownership change, so we always enforce them here.
+        - name: fix-cookie-perms
+          image: "{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag }}"
+          imagePullPolicy: {{ .Values.rabbitmq.image.pullPolicy }}
+          securityContext:
+            runAsUser: 0   # root — needed to chmod a file owned by uid 999
+            allowPrivilegeEscalation: false
+          command:
+            - sh
+            - -c
+            - |
+              COOKIE=/var/lib/rabbitmq/.erlang.cookie
+              if [ -f "$COOKIE" ]; then
+                chmod 400 "$COOKIE"
+                echo "Fixed .erlang.cookie permissions"
+              else
+                echo ".erlang.cookie not present yet — will be created by RabbitMQ"
+              fi
+          volumeMounts:
+            - name: {{ .Values.rabbitmq.storage.volumeName }}
+              mountPath: {{ .Values.rabbitmq.storage.mountPath }}
       containers:
         - name: rabbitmq
           image: "{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag }}"
