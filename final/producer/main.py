@@ -2,6 +2,10 @@
 API Producer — RPC edition
 Receives HTTP from Kong, publishes to RabbitMQ, awaits response via Direct Reply-to.
 """
+try:
+    import instana  # noqa: F401 — Instana in-process sensor (metrics + fingerprinting)
+except ImportError:
+    pass
 import os
 import json
 from contextlib import asynccontextmanager

@@ -3,6 +3,10 @@ Notification Service — RPC Consumer + WebSocket
 - Consumer: GET /notifications (via queue), replies via RabbitMQ Direct Reply-to
 - WebSocket: /ws (direct) — runs alongside consumer
 """
+try:
+    import instana  # noqa: F401 — Instana in-process sensor (metrics + fingerprinting)
+except ImportError:
+    pass
 import os
 import asyncio
 import json

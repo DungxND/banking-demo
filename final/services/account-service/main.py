@@ -3,6 +3,10 @@ Account Service — RPC Consumer
 Consumes from account.requests, processes, replies via RabbitMQ Direct Reply-to.
 FastAPI + instrument_fastapi để xuất traces sang Jaeger (health check tạo span).
 """
+try:
+    import instana  # noqa: F401 — Instana in-process sensor (metrics + fingerprinting)
+except ImportError:
+    pass
 import os
 import asyncio
 import json

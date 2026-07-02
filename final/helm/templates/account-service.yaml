@@ -51,8 +51,6 @@ spec:
               value: account-service
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: "service.namespace=banking-demo"
-            - name: AUTOWRAPT_BOOTSTRAP
-              value: instana
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
