@@ -4,14 +4,17 @@ import { api, setSession } from "./api";
 export default function Login({ onOk, onGoRegister, onGoAdmin }) {
   const [phone, setPhone] = useState("");
   const [password, setP] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const submit = () => {
     setErr("");
+    if (!phone.trim()) { setErr("Phone number is required"); return; }
+    if (!password)     { setErr("Password is required"); return; }
     startTransition(async () => {
       try {
-        const r = await api.login(phone, password);
+        const r = await api.login(phone.trim(), password);
         setSession(r.session);
         onOk();
       } catch (e) {
@@ -20,69 +23,130 @@ export default function Login({ onOk, onGoRegister, onGoAdmin }) {
     });
   };
 
+  const onKey = (e) => { if (e.key === "Enter") submit(); };
+
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-7 shadow-xs">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="h-10 w-10 rounded-xl bg-blue-600 text-white grid place-items-center font-bold">B</div>
-          <div>
-            <div className="text-base font-semibold text-slate-900">NPD Banking</div>
-            <div className="text-xs text-slate-500">Postgres • Redis Session • WebSocket Notify</div>
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md">
+        <div className="mb-5 text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
+            Demo banking workspace
           </div>
         </div>
 
-        <h2 className="text-xl font-semibold text-slate-900">Sign in</h2>
-        <p className="text-sm text-slate-500 mt-1 mb-5">
-          Use your account to access balance, transfers and notifications.
-        </p>
-
-        <div className="space-y-3">
-          <input
-            className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Phone number (digits only)"
-            inputMode="numeric"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          <input
-            className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setP(e.target.value)}
-          />
-        </div>
-
-        <div className="mt-5 flex gap-3">
-          <button
-            onClick={submit}
-            disabled={isPending}
-            className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {isPending ? "Signing in..." : "Sign in"}
-          </button>
-          <button
-            onClick={onGoRegister}
-            disabled={isPending}
-            className="flex-1 rounded-xl border px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-          >
-            Create
-          </button>
-        </div>
-
-        {err && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {err}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-7 py-5 flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/20 text-lg font-bold text-white">
+              B
+            </div>
+            <div>
+              <div className="text-base font-semibold leading-tight text-white">NPD Banking</div>
+              <div className="mt-0.5 text-xs text-blue-100">Postgres · Redis Session · WebSocket Notify</div>
+            </div>
           </div>
-        )}
 
-        <div className="mt-5 flex items-center justify-between text-xs text-slate-400">
-          <span>© Banking Demo Lab • Postgres + Redis</span>
-          {onGoAdmin && (
-            <button onClick={onGoAdmin} className="text-amber-600 hover:text-amber-700 font-semibold">
-              Admin
-            </button>
-          )}
+          <div className="px-7 py-6">
+            <h1 className="text-2xl font-semibold text-slate-900">Welcome back</h1>
+            <p className="mt-1 mb-6 text-sm text-slate-500">
+              Sign in to access your account balance, transfers, and live notifications.
+            </p>
+
+            <div className="mb-5 grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <div>
+                <div className="font-semibold text-slate-900">Realtime updates</div>
+                <div className="mt-1">WebSocket-powered notifications in the dashboard.</div>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-900">Session-based auth</div>
+                <div className="mt-1">Redis-backed sessions for quick demo sign-in flow.</div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="login-phone" className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Phone number
+                </label>
+                <input
+                  id="login-phone"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="e.g. 0987654321"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onKeyDown={onKey}
+                  disabled={isPending}
+                />
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <label htmlFor="login-pw" className="block text-xs font-semibold text-slate-600">
+                    Password
+                  </label>
+                  <span className="text-[11px] text-slate-400">Press Enter to sign in</span>
+                </div>
+                <div className="relative">
+                  <input
+                    id="login-pw"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 pr-12 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    placeholder="Your password"
+                    type={showPw ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setP(e.target.value)}
+                    onKeyDown={onKey}
+                    disabled={isPending}
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 hover:text-slate-600"
+                    aria-label={showPw ? "Hide password" : "Show password"}
+                  >
+                    {showPw ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {err && (
+              <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {err}
+              </div>
+            )}
+
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={submit}
+                disabled={isPending}
+                className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60"
+              >
+                {isPending ? "Signing in…" : "Sign in"}
+              </button>
+              <button
+                onClick={onGoRegister}
+                disabled={isPending}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60"
+              >
+                Create account
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-7 py-3 text-xs text-slate-400">
+            <span>© Banking Demo Lab · Postgres + Redis</span>
+            {onGoAdmin && (
+              <button
+                onClick={onGoAdmin}
+                className="font-semibold text-amber-600 transition-colors hover:text-amber-700"
+              >
+                Admin →
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

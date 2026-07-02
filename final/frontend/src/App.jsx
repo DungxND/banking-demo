@@ -8,9 +8,14 @@ import { getSession, clearSession } from "./api";
 export default function App() {
   const [page, setPage] = useState(getSession() ? "dashboard" : "login");
 
+  const goToLogin = () => setPage("login");
+  const goToRegister = () => setPage("register");
+  const goToDashboard = () => setPage("dashboard");
+  const goToAdmin = () => setPage("admin");
+
   const logout = () => {
     clearSession();
-    setPage("login");
+    goToLogin();
   };
 
   if (page === "admin") {
@@ -18,12 +23,12 @@ export default function App() {
   }
 
   if (page === "login") {
-    return <Login onOk={() => setPage("dashboard")} onGoRegister={() => setPage("register")} onGoAdmin={() => setPage("admin")} />;
+    return <Login onOk={goToDashboard} onGoRegister={goToRegister} onGoAdmin={goToAdmin} />;
   }
 
   if (page === "register") {
-    return <Register onGoLogin={() => setPage("login")} />;
+    return <Register onGoLogin={goToLogin} />;
   }
 
-  return <Dashboard onLogout={logout} onGoAdmin={() => setPage("admin")} />;
+  return <Dashboard onLogout={logout} onGoAdmin={goToAdmin} />;
 }

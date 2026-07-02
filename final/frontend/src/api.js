@@ -45,14 +45,23 @@ export const api = {
 
   me: () => req("/api/account/me"),
 
-  lookupAccount: (account_number) =>
-    req(`/api/account/lookup?account_number=${encodeURIComponent(account_number)}`),
+  lookupAccount: (value) => {
+    // value can be a phone number or 12-digit account number
+    const isPhone = !/^\d{12}$/.test(value.trim());
+    const param = isPhone
+      ? `phone=${encodeURIComponent(value.trim())}`
+      : `account_number=${encodeURIComponent(value.trim())}`;
+    return req(`/api/account/lookup?${param}`);
+  },
 
-  transfer: (to_account_number, amount) =>
-    req("/api/transfer/transfer", {
-      method: "POST",
-      body: { to_account_number, amount: Number(amount) }
-    }),
+  transfer: (to, amount) => {
+    // to can be phone or 12-digit account number
+    const isPhone = !/^\d{12}$/.test(to.trim());
+    const body = isPhone
+      ? { to_phone: to.trim(), amount: Number(amount) }
+      : { to_account_number: to.trim(), amount: Number(amount) };
+    return req("/api/transfer/transfer", { method: "POST", body });
+  },
 
   notifications: () => req("/api/notifications/notifications"),
 

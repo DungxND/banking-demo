@@ -60,11 +60,17 @@ async def handle_balance(payload: dict, headers: dict) -> dict:
 
 async def handle_lookup(payload: dict, headers: dict) -> dict:
     acct = (payload.get("account_number") or "").strip()
-    if not acct.isdigit():
-        return {"status": 400, "body": {"detail": "account_number must be digits only"}}
+    phone = (payload.get("phone") or "").strip()
+    if not acct and not phone:
+        return {"status": 400, "body": {"detail": "account_number or phone required"}}
     db = SessionLocal()
     try:
-        u = db.execute(select(User).where(User.account_number == acct)).scalar_one_or_none()
+        if phone:
+            u = db.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
+        else:
+            if not acct.isdigit():
+                return {"status": 400, "body": {"detail": "account_number must be digits only"}}
+            u = db.execute(select(User).where(User.account_number == acct)).scalar_one_or_none()
         if not u:
             return {"status": 404, "body": {"detail": "Account not found"}}
         return {"status": 200, "body": {"account_number": u.account_number, "username": u.username}}

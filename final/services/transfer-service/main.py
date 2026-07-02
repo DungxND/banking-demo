@@ -40,13 +40,14 @@ async def handle_transfer(payload: dict, headers: dict, trace: dict) -> dict:
     body = payload
     amount = body.get("amount", 0)
     to_acct = (body.get("to_account_number") or "").strip()
+    to_phone = (body.get("to_phone") or "").strip()
     to_username = (body.get("to_username") or "").strip()
     if amount <= 0:
         log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="amount_invalid", detail="Amount must be > 0", service="transfer-service")
         return {"status": 400, "body": {"detail": "Amount must be > 0"}}
-    if not to_acct and not to_username:
+    if not to_acct and not to_phone and not to_username:
         log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="missing_recipient", service="transfer-service")
-        return {"status": 400, "body": {"detail": "Missing to_account_number/to_username"}}
+        return {"status": 400, "body": {"detail": "Missing to_account_number/to_phone/to_username"}}
     if to_acct and not to_acct.isdigit():
         log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="invalid_account_format", service="transfer-service")
         return {"status": 400, "body": {"detail": "to_account_number must be digits only"}}
@@ -56,7 +57,9 @@ async def handle_transfer(payload: dict, headers: dict, trace: dict) -> dict:
         if not sender:
             log_event(logger, "transfer_rejected", correlation_id=correlation_id, path=path, action=action, reason="sender_not_found", user_id=user_id, service="transfer-service")
             return {"status": 404, "body": {"detail": "Sender not found"}}
-        if to_acct:
+        if to_phone:
+            receiver = db.execute(select(User).where(User.phone == to_phone).with_for_update()).scalar_one_or_none()
+        elif to_acct:
             receiver = db.execute(select(User).where(User.account_number == to_acct).with_for_update()).scalar_one_or_none()
         else:
             receiver = db.execute(select(User).where(User.username == to_username).with_for_update()).scalar_one_or_none()
